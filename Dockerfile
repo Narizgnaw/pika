@@ -15,7 +15,7 @@ ARG TARGETOS
 ARG TARGETARCH
 
 # 从外部编译的产物复制文件
-COPY bin/pika-${TARGETOS}-${TARGETARCH} ./pika
+COPY ./bin/pika-${TARGETOS}-${TARGETARCH} ./pika
 
 # 复制配置文件示例
 COPY config.example.yaml ./config.yaml
