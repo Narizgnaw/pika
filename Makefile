@@ -46,9 +46,6 @@ build-agents:
 	@upx bin/agents/pika-agent-linux-amd64
 	@upx bin/agents/pika-agent-linux-arm64
 	@upx bin/agents/pika-agent-linux-armv7
-	@upx bin/agents/pika-agent-darwin-amd64
-	@upx bin/agents/pika-agent-darwin-arm64
-	@upx bin/agents/pika-agent-windows-amd64.exe
 	@echo "All agents compressed successfully!"
 	@ls -lh bin/agents/
 

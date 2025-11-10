@@ -12,363 +12,153 @@
 
 Pika 是一个轻量级的探针监控系统，支持实时数据采集、存储和查询。系统采用 WebSocket 进行探针与服务端的通信，使用 PostgreSQL 存储时序数据，提供完整的 RESTful API 和用户管理功能。
 
-## 功能特性
-
-- ✅ **实时通信**: 基于 WebSocket 的探针通信，支持实时数据上报
-- ✅ **多指标支持**: CPU、内存、磁盘、网络、负载等多种系统指标
-- ✅ **时序存储**: PostgreSQL 存储时序数据，自动清理过期数据（30天）
-- ✅ **用户管理**: 完整的用户 CRUD、角色管理、密码加密
-- ✅ **用户认证**: Session 管理和 Token 认证
-- ✅ **RESTful API**: 提供完整的 API 接口
-- ✅ **依赖注入**: 使用 Wire 进行依赖管理
-- ✅ **自动重连**: 探针支持自动重连和心跳检测
-- ✅ **易于扩展**: 清晰的分层架构，易于添加新功能
-- ✅ **psutil 采集**: 探针使用 gopsutil 库进行系统信息采集
-
 ## 快速开始
 
-### 前置要求
+### 环境要求
 
-- Go 1.25+
-- Docker & Docker Compose
-- Make
+- Docker 20.10+
+- Docker Compose 1.29+
 
-### 一键启动
+### 使用 Docker Compose 部署（推荐）
+
+#### 1. 克隆项目
 
 ```bash
-# 克隆项目
-git clone <repository-url>
+git clone https://github.com/dushixiang/pika.git
 cd pika
-
-# 启动服务（自动启动数据库、编译、运行）
-./start.sh
 ```
 
-服务将在 `http://localhost:18888` 启动
+#### 2. 配置环境变量
 
-### 手动启动
-
-```bash
-# 1. 启动数据库
-docker-compose up -d
-
-# 2. 编译项目
-make build-backend
-
-# 3. 运行服务端
-./bin/pika
-
-# 4. 运行探针客户端（可选，用于测试）
-./bin/agent
-```
-
-### 测试 API
-
-```bash
-./test_api.sh
-```
-
-## 技术栈
-
-| 类别 | 技术 |
-|------|------|
-| 语言 | Go 1.25 |
-| Web 框架 | Echo v4 |
-| 数据库 | PostgreSQL |
-| ORM | GORM |
-| WebSocket | Gorilla WebSocket |
-| 依赖注入 | Google Wire |
-| 日志 | Uber Zap |
-| 配置 | Viper |
-| 系统信息采集 | gopsutil v4 |
-| 密码加密 | bcrypt |
-
-## 架构
-
-```
-┌─────────────────────────────────────┐
-│         Web/WebSocket Layer         │
-│    (Echo + Gorilla WebSocket)       │
-└─────────────────────────────────────┘
-              ↓
-┌─────────────────────────────────────┐
-│         Handler Layer               │
-│  (account, agent, user handlers)    │
-└─────────────────────────────────────┘
-              ↓
-┌─────────────────────────────────────┐
-│         Service Layer               │
-│  (account, agent, user services)    │
-└─────────────────────────────────────┘
-              ↓
-┌─────────────────────────────────────┐
-│       Repository Layer              │
-│  (session, agent, user, metric)     │
-└─────────────────────────────────────┘
-              ↓
-┌─────────────────────────────────────┐
-│         Database (PostgreSQL)       │
-└─────────────────────────────────────┘
-```
-
-## API 接口
-
-### 认证相关
-- `POST /api/auth` - Token 登录
-- `POST /api/login` - 用户名密码登录
-- `GET /api/account/info` - 获取用户信息
-- `POST /api/logout` - 退出登录
-
-### 探针管理
-- `GET /api/agents` - 获取所有探针
-- `GET /api/agents/online` - 获取在线探针
-- `GET /api/agents/:id` - 获取探针详情
-- `GET /api/agents/:id/metrics` - 获取指标数据（支持时间戳查询）
-- `GET /api/agents/:id/metrics/latest` - 获取最新指标
-
-### 用户管理
-- `GET /api/users` - 获取用户列表（分页）
-- `POST /api/users` - 创建用户
-- `GET /api/users/:id` - 获取用户详情
-- `PUT /api/users/:id` - 更新用户
-- `DELETE /api/users/:id` - 删除用户
-- `POST /api/users/:id/password` - 修改密码
-- `POST /api/users/:id/reset-password` - 重置密码（管理员）
-- `POST /api/users/:id/status` - 更新用户状态
-
-### WebSocket
-- `GET /ws/agent` - 探针连接
-
-## 数据模型
-
-### 用户表 (users)
-- id (主键, UUID)
-- username (唯一索引)
-- password (bcrypt 加密)
-- nickname
-- email
-- phone
-- avatar
-- role (admin/user)
-- status (0-禁用, 1-启用)
-- created_at (时间戳毫秒)
-- updated_at (时间戳毫秒)
-
-### 探针表 (agents)
-- id (主键, UUID)
-- name
-- hostname
-- ip
-- os
-- arch
-- version
-- status (0-离线, 1-在线)
-- last_seen_at (时间戳毫秒)
-- created_at (时间戳毫秒)
-- updated_at (时间戳毫秒)
-
-### 指标表
-所有指标表都使用 `int64` 类型的时间戳（毫秒）：
-- cpu_metrics
-- memory_metrics
-- disk_metrics
-- network_metrics
-- load_metrics
-
-## 项目结构
-
-```
-pika/
-├── cmd/                    # 应用程序入口
-│   ├── serv/              # 服务端
-│   └── agent/             # 探针客户端
-├── internal/              # 内部代码
-│   ├── handler/           # HTTP/WebSocket 处理器
-│   ├── service/           # 业务逻辑
-│   ├── repo/              # 数据访问
-│   ├── models/            # 数据模型
-│   └── websocket/         # WebSocket 管理
-├── web/                   # 前端资源
-├── config.yaml            # 配置文件
-├── docker-compose.yml     # Docker 配置
-├── Makefile              # 构建脚本
-└── *.md                  # 文档
-```
-
-## 配置
-
-配置文件位于 `config.yaml`：
+编辑 `docker-compose.yml` 文件，修改以下配置项：
 
 ```yaml
-Database:
-  Type: postgres
-  Postgres:
-    Hostname: localhost
-    Port: 15432
-    Username: pika
-    Password: pika
-    Database: pika
+# PostgreSQL 数据库配置
+POSTGRES_DB: pika           # 数据库名称
+POSTGRES_USER: pika         # 数据库用户名
+POSTGRES_PASSWORD: pika     # 数据库密码（建议修改）
 
-log:
-  Level: debug
-  Filename: ./logs/pika.log
-
-Server:
-  Addr: "0.0.0.0:18888"
+# Pika 应用配置
+DATABASE_POSTGRES_HOSTNAME: postgresql  # 数据库主机名
+DATABASE_POSTGRES_PORT: 5432           # 数据库端口
+DATABASE_POSTGRES_USERNAME: pika       # 数据库用户名
+DATABASE_POSTGRES_PASSWORD: pika       # 数据库密码（需与上面一致）
+DATABASE_POSTGRES_DATABASE: pika       # 数据库名称
+SERVER_ADDR: "0.0.0.0:8080"           # 服务监听地址
+SERVER_IP_EXTRACTOR: "x-forwarded-for" # IP 提取方式
+APP_JWT_SECRET: "your-secret-key"      # JWT 密钥（必须修改！）
 ```
 
-## 开发
+**重要**：请务必修改 `APP_JWT_SECRET` 为您自己的密钥，建议使用至少 32 位的随机字符串。
 
-### 编译
+生成随机密钥示例：
+```bash
+# 使用 openssl 生成 32 位随机字符串
+openssl rand -base64 32
+```
+
+#### 3. 启动服务
 
 ```bash
-# 编译服务端
-make build-server
+# 启动所有服务
+docker-compose up -d
 
-# 编译探针客户端
-make build-agent
+# 查看服务状态
+docker-compose ps
 
-# 编译所有后端
-make build-backend
-
-# 清理
-make clean
+# 查看日志
+docker-compose logs -f pika
 ```
 
-### 运行
+#### 4. 验证部署
+
+服务启动后，访问以下地址：
+
+- **API 服务**：http://localhost:8080
+- **健康检查**：http://localhost:8080/health（如果有）
+
+#### 5. 停止服务
 
 ```bash
-# 运行服务端
-make run-server
+# 停止服务
+docker-compose stop
 
-# 运行探针客户端
-make run-agent
+# 停止并删除容器
+docker-compose down
+
+# 停止并删除容器及数据卷
+docker-compose down -v
 ```
 
-### 测试
+### 生产环境部署建议
+
+#### 1. 安全配置
+
+- 修改默认的数据库密码
+- 设置强随机的 JWT 密钥
+- 使用 HTTPS 反向代理（如 Nginx）
+- 限制数据库端口仅允许内部访问
+
+#### 2. 数据持久化
+
+数据库数据默认存储在 `./data/postgresql` 目录，请定期备份：
 
 ```bash
-# 运行测试
-make test
+# 备份数据库
+docker-compose exec postgresql pg_dump -U pika pika > backup.sql
 
-# API 测试
-./test_api.sh
+# 恢复数据库
+docker-compose exec -T postgresql psql -U pika pika < backup.sql
 ```
 
-## WebSocket 消息协议
+#### 3. 反向代理配置（Nginx 示例）
 
-### 探针注册
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
 
-```json
-{
-  "type": "register",
-  "data": {
-    "name": "探针名称",
-    "hostname": "主机名",
-    "ip": "192.168.1.100",
-    "os": "linux",
-    "arch": "amd64",
-    "version": "1.0.0"
-  }
-}
-```
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
 
-### 心跳
-
-```json
-{
-  "type": "heartbeat",
-  "data": {}
-}
-```
-
-### 指标数据
-
-```json
-{
-  "type": "metrics",
-  "data": {
-    "type": "cpu",
-    "data": {
-      "usagePercent": 45.5,
-      "coreCount": 8
+        # WebSocket 支持
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
     }
-  }
 }
 ```
 
-## 监控指标
+### 故障排查
 
-系统支持以下监控指标（使用 gopsutil 采集）：
+#### 服务无法启动
 
-- **CPU**: 使用率、核心数
-- **内存**: 总量、已用、空闲、使用率
-- **磁盘**: 挂载点、容量、使用情况
-- **网络**: 网卡流量统计
-- **负载**: 1/5/15分钟负载
-
-## 时间戳说明
-
-所有时间字段均使用 `int64` 类型的毫秒时间戳：
-
-- 数据库存储：毫秒时间戳
-- API 查询：支持毫秒时间戳参数
-- WebSocket 消息：服务端自动添加时间戳
-
-示例：
 ```bash
-# 获取最近1小时的数据
-START=$(( $(date +%s) * 1000 - 3600000 ))
-END=$(( $(date +%s) * 1000 ))
-curl "http://localhost:18888/api/agents/{id}/metrics?type=cpu&start=$START&end=$END"
+# 查看详细日志
+docker-compose logs -f
+
+# 检查容器状态
+docker-compose ps
+
+# 重启服务
+docker-compose restart
 ```
 
-## 数据保留
+#### 数据库连接失败
 
-- 默认保留 30 天的历史数据
-- 每小时自动清理过期数据
-- 可在代码中自定义保留策略
+- 确认 PostgreSQL 容器已启动且健康检查通过
+- 检查数据库配置是否正确
+- 查看数据库日志：`docker-compose logs postgresql`
 
-## 性能
+#### 端口冲突
 
-- 支持数千个探针同时连接
-- WebSocket 实时通信，低延迟
-- PostgreSQL 时序数据存储
-- 自动清理机制，保持数据库大小可控
+如果 8080 或 5432 端口被占用，修改 `docker-compose.yml` 中的端口映射：
 
-## 安全
-
-生产环境建议：
-
-1. 修改 WebSocket 的 `CheckOrigin` 函数
-2. 使用 HTTPS/WSS
-3. 配置防火墙规则
-4. 使用强密码（bcrypt 加密）
-5. 定期备份数据库
-6. 实现完整的 JWT 认证
-
-## 更新日志
-
-### v2.0.0 (2025-10-20)
-
-- ✅ 将 Probe 重命名为 Agent
-- ✅ 时间字段改为 int64 时间戳（毫秒）
-- ✅ 添加用户表和完整的用户管理功能
-- ✅ 探针使用 gopsutil 进行系统信息采集
-- ✅ 密码使用 bcrypt 加密
-- ✅ 完善的用户 CRUD 接口
-- ✅ 支持用户角色和状态管理
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-## 许可证
-
-[添加许可证信息]
-
----
-
-**开发状态**: ✅ v2.0 开发完成  
-**版本**: 2.0.0  
-**最后更新**: 2025-10-20
+```yaml
+ports:
+  - "8081:8080"  # 将 8080 改为其他端口
+```
