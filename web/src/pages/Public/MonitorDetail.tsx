@@ -133,9 +133,7 @@ const StatCard = ({icon, label, value, color = 'blue'}: {
     );
 };
 
-type MetricsTooltipProps = TooltipProps<number, string> & { unit?: string };
-
-const CustomTooltip = ({active, payload, label, unit = ' ms'}: MetricsTooltipProps) => {
+const CustomTooltip = ({active, payload, label, unit = ' ms'}: TooltipProps<number, string> & { unit?: string; label?: string; payload?: any[] }) => {
     if (!active || !payload || payload.length === 0) {
         return null;
     }
