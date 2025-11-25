@@ -2,8 +2,6 @@ import {useEffect, useState} from 'react';
 import {Activity, LayoutGrid, List, LogIn, Server, Settings} from 'lucide-react';
 import {getCurrentUser} from '../api/auth';
 import {Link} from "react-router-dom";
-import {getPublicSystemConfig, DEFAULT_SYSTEM_CONFIG} from '../api/system-config';
-import type {SystemConfig} from '../api/system-config';
 
 interface PublicHeaderProps {
     viewMode?: 'grid' | 'list';
@@ -17,21 +15,9 @@ const PublicHeader = ({
                           showViewToggle = false
                       }: PublicHeaderProps) => {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
-    const [systemConfig, setSystemConfig] = useState<SystemConfig>(DEFAULT_SYSTEM_CONFIG);
     const currentPath = window.location.pathname;
 
     useEffect(() => {
-        // 获取系统配置
-        getPublicSystemConfig()
-            .then((config) => {
-                setSystemConfig(config);
-                // 更新网页 title
-                document.title = config.systemNameZh || DEFAULT_SYSTEM_CONFIG.systemNameZh;
-            })
-            .catch((error) => {
-                console.error('获取系统配置失败:', error);
-            });
-
         // 检查本地是否有 token
         const token = localStorage.getItem('token');
         const userInfo = localStorage.getItem('userInfo');
@@ -67,8 +53,8 @@ const PublicHeader = ({
                         {/* Logo 和品牌 */}
                         <div className="flex items-center gap-2 sm:gap-3">
                             <img
-                                src={systemConfig.logoBase64 || '/logo.png'}
-                                className="h-8 w-8 sm:h-9 sm:w-9 object-contain"
+                                src={"/api/logo"}
+                                className="h-8 w-8 sm:h-9 sm:w-9 object-contain rounded-md"
                                 alt={'logo'}
                                 onError={(e) => {
                                     e.currentTarget.src = '/logo.png';
@@ -76,10 +62,10 @@ const PublicHeader = ({
                             />
                             <div className="hidden md:block">
                                 <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-blue-600">
-                                    {systemConfig.systemNameEn}
+                                    {window.SystemConfig?.SystemNameEn}
                                 </p>
                                 <h1 className="text-sm font-bold text-slate-900">
-                                    {systemConfig.systemNameZh}
+                                    {window.SystemConfig?.SystemNameZh}
                                 </h1>
                             </div>
                         </div>

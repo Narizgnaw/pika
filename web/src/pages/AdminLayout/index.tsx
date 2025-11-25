@@ -5,8 +5,6 @@ import {App, Avatar, Button, Dropdown, Space} from 'antd';
 import {Activity, BookOpen, Eye, Key, LogOut, Server, Settings, User as UserIcon} from 'lucide-react';
 import {logout} from '../../api/auth';
 import {getServerVersion} from '../../api/agent';
-import {getSystemConfig, DEFAULT_SYSTEM_CONFIG} from '../../api/system-config';
-import type {SystemConfig} from '../../api/system-config';
 import type {User} from '../../types';
 import {cn} from '../../lib/utils';
 
@@ -26,7 +24,6 @@ const AdminLayout = () => {
     const {message: messageApi, modal} = App.useApp();
     const [userInfo, setUserInfo] = useState<User | null>(null);
     const [version, setVersion] = useState<string>('');
-    const [systemConfig, setSystemConfig] = useState<SystemConfig>(DEFAULT_SYSTEM_CONFIG);
 
     const menuItems: NavItem[] = useMemo(
         () => [
@@ -68,17 +65,6 @@ const AdminLayout = () => {
         }
 
         setUserInfo(JSON.parse(userInfoStr));
-
-        // 获取系统配置
-        getSystemConfig()
-            .then((config) => {
-                setSystemConfig(config);
-                // 更新网页 title
-                document.title = `${config.systemNameZh || DEFAULT_SYSTEM_CONFIG.systemNameZh} - 控制台`;
-            })
-            .catch((error) => {
-                console.error('获取系统配置失败:', error);
-            });
 
         // 获取服务端版本信息
         getServerVersion()
@@ -129,16 +115,16 @@ const AdminLayout = () => {
                     <div className="flex items-center gap-3 text-white">
                         <div className="flex items-center justify-center">
                             <img
-                                src={systemConfig.logoBase64 || '/logo.png'}
+                                src={"/api/logo"}
                                 alt="Logo"
-                                className="h-10 w-10 object-contain"
+                                className="h-10 w-10 object-contain rounded-md"
                                 onError={(e) => {
                                     e.currentTarget.src = '/logo.png';
                                 }}
                             />
                         </div>
                         <div>
-                            <p className="text-[11px] uppercase tracking-[0.3em] text-white/60">{systemConfig.systemNameEn}</p>
+                            <p className="text-[11px] uppercase tracking-[0.3em] text-white/60">{window.SystemConfig?.SystemNameZh}</p>
                             <p className="text-sm font-semibold">控制台</p>
                         </div>
                     </div>
@@ -154,7 +140,7 @@ const AdminLayout = () => {
                         </Button>
                         <Button
                             type="text"
-                            icon={<BookOpen className="h-4 w-4" strokeWidth={2} />}
+                            icon={<BookOpen className="h-4 w-4" strokeWidth={2}/>}
                             onClick={() => navigate('/admin/agents-install')}
                             className="!h-9 !items-center !rounded-full !px-3 !text-xs !text-white hover:!bg-blue-500/10"
                         >
@@ -235,7 +221,7 @@ const AdminLayout = () => {
                                     <div>
                                         <p className="text-sm font-semibold text-gray-900">{version}</p>
                                         <p className="text-[11px] text-gray-500 uppercase tracking-[0.1em]">
-                                            {systemConfig.systemNameEn}
+                                            {window.SystemConfig?.SystemNameEn}
                                         </p>
                                     </div>
                                 </div>

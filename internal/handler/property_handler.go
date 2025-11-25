@@ -1,19 +1,14 @@
 package handler
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 
+	"github.com/dushixiang/pika/internal/models"
 	"github.com/dushixiang/pika/internal/service"
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
-)
-
-const (
-	// PropertyIDNotificationChannels 通知渠道配置的固定 ID
-	PropertyIDNotificationChannels = "notification_channels"
-	// PropertyIDSystemConfig 系统配置的固定 ID
-	PropertyIDSystemConfig = "system_config"
 )
 
 type PropertyHandler struct {
@@ -103,38 +98,72 @@ func (h *PropertyHandler) DeleteProperty(c echo.Context) error {
 	})
 }
 
-// GetSystemConfig 获取系统配置（公开访问，仅返回系统配置）
-func (h *PropertyHandler) GetSystemConfig(c echo.Context) error {
-	property, err := h.service.Get(c.Request().Context(), PropertyIDSystemConfig)
+// GetLogo 获取系统 Logo（公开访问，返回图片文件流）
+func (h *PropertyHandler) GetLogo(c echo.Context) error {
+	sysConfig, err := h.service.GetSystemConfig(c.Request().Context())
 	if err != nil {
-		// 如果配置不存在，返回默认值
-		return c.JSON(http.StatusOK, map[string]interface{}{
-			"id":   PropertyIDSystemConfig,
-			"name": "系统配置",
-			"value": map[string]string{
-				"systemNameEn": "Pika Monitor",
-				"systemNameZh": "皮卡监控",
-				"logoBase64":   "",
-			},
-		})
+		// 如果配置不存在，返回 404
+		return echo.NewHTTPError(http.StatusNotFound, "Logo 不存在")
 	}
 
-	// 解析 JSON 值
-	var value interface{}
-	if property.Value != "" {
-		if err := json.Unmarshal([]byte(property.Value), &value); err != nil {
-			h.logger.Error("解析属性值失败", zap.String("id", PropertyIDSystemConfig), zap.Error(err))
-			return c.JSON(http.StatusInternalServerError, map[string]string{
-				"error": "解析属性值失败",
-			})
+	// 提取 logoBase64 字段
+	logoBase64 := sysConfig.LogoBase64
+	if logoBase64 == "" {
+		return echo.NewHTTPError(http.StatusNotFound, "Logo 不存在")
+	}
+
+	// 解析 base64 数据
+	// 格式: data:image/png;base64,iVBORw0KGgoAAAANS...
+	var imageData []byte
+	var contentType string
+
+	// 检查是否包含 data URI 前缀
+	if len(logoBase64) > 0 && logoBase64[:5] == "data:" {
+		// 查找逗号位置
+		commaIndex := -1
+		for i := 0; i < len(logoBase64) && i < 100; i++ {
+			if logoBase64[i] == ',' {
+				commaIndex = i
+				break
+			}
 		}
+
+		if commaIndex == -1 {
+			return echo.NewHTTPError(http.StatusInternalServerError, "无效的图片数据格式")
+		}
+
+		// 提取 MIME 类型
+		header := logoBase64[5:commaIndex]
+		if len(header) > 7 && header[len(header)-7:] == ";base64" {
+			contentType = header[:len(header)-7]
+		} else {
+			contentType = "image/png" // 默认类型
+		}
+
+		// 解码 base64
+		base64Data := logoBase64[commaIndex+1:]
+		var decodeErr error
+		imageData, decodeErr = base64.StdEncoding.DecodeString(base64Data)
+		if decodeErr != nil {
+			h.logger.Error("解码 base64 失败", zap.Error(decodeErr))
+			return echo.NewHTTPError(http.StatusInternalServerError, "解码图片数据失败")
+		}
+	} else {
+		// 直接是 base64 字符串
+		var decodeErr error
+		imageData, decodeErr = base64.StdEncoding.DecodeString(logoBase64)
+		if decodeErr != nil {
+			h.logger.Error("解码 base64 失败", zap.Error(decodeErr))
+			return echo.NewHTTPError(http.StatusInternalServerError, "解码图片数据失败")
+		}
+		contentType = "image/png" // 默认类型
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"id":    property.ID,
-		"name":  property.Name,
-		"value": value,
-	})
+	// 设置响应头
+	c.Response().Header().Set("Content-Type", contentType)
+	c.Response().Header().Set("Cache-Control", "public, max-age=3600") // 缓存 1 小时
+
+	return c.Blob(http.StatusOK, contentType, imageData)
 }
 
 // TestNotificationChannel 测试通知渠道（从数据库读取配置）
@@ -148,14 +177,7 @@ func (h *PropertyHandler) TestNotificationChannel(c echo.Context) error {
 
 	ctx := c.Request().Context()
 
-	// 从数据库获取通知渠道配置
-	var channels []struct {
-		Type    string                 `json:"type"`
-		Enabled bool                   `json:"enabled"`
-		Config  map[string]interface{} `json:"config"`
-	}
-
-	err := h.service.GetValue(ctx, PropertyIDNotificationChannels, &channels)
+	channels, err := h.service.GetNotificationChannelConfigs(c.Request().Context())
 	if err != nil {
 		h.logger.Error("获取通知渠道配置失败", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]string{
@@ -164,12 +186,7 @@ func (h *PropertyHandler) TestNotificationChannel(c echo.Context) error {
 	}
 
 	// 查找指定类型的渠道
-	var targetChannel *struct {
-		Type    string                 `json:"type"`
-		Enabled bool                   `json:"enabled"`
-		Config  map[string]interface{} `json:"config"`
-	}
-
+	var targetChannel *models.NotificationChannelConfig
 	for i := range channels {
 		if channels[i].Type == channelType {
 			targetChannel = &channels[i]

@@ -1,4 +1,4 @@
-import { get, put } from './request';
+import {get, put} from './request';
 
 const PROPERTY_ID_SYSTEM_CONFIG = 'system_config';
 
@@ -20,19 +20,6 @@ export const getSystemConfig = async (): Promise<SystemConfig> => {
     try {
         const response = await get<{ id: string; name: string; value: SystemConfig }>(
             `/admin/properties/${PROPERTY_ID_SYSTEM_CONFIG}`
-        );
-        return response.data.value || DEFAULT_SYSTEM_CONFIG;
-    } catch (error) {
-        // 如果配置不存在，返回默认值
-        return DEFAULT_SYSTEM_CONFIG;
-    }
-};
-
-// 获取系统配置（公开访问，不需要认证）
-export const getPublicSystemConfig = async (): Promise<SystemConfig> => {
-    try {
-        const response = await get<{ id: string; name: string; value: SystemConfig }>(
-            `/system-config`
         );
         return response.data.value || DEFAULT_SYSTEM_CONFIG;
     } catch (error) {

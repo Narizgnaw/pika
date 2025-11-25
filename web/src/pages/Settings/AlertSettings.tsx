@@ -212,16 +212,14 @@ const AlertSettings = () => {
                         </Form.Item>
                     </Card>
 
-                    <div className="flex justify-end pt-4">
-                        <Button
-                            type="primary"
-                            icon={<Save size={16}/>}
-                            loading={createMutation.isPending || updateMutation.isPending}
-                            onClick={handleSubmit}
-                        >
-                            保存配置
-                        </Button>
-                    </div>
+                    <Button
+                        type="primary"
+                        icon={<Save size={16}/>}
+                        loading={createMutation.isPending || updateMutation.isPending}
+                        onClick={handleSubmit}
+                    >
+                        保存配置
+                    </Button>
                 </Space>
             </Form>
         </div>

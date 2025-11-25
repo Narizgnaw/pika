@@ -1,7 +1,9 @@
 package internal
 
 import (
+	"bytes"
 	"context"
+	"html/template"
 	"log"
 	"net/http"
 	"strings"
@@ -11,8 +13,10 @@ import (
 	"github.com/dushixiang/pika/internal/handler"
 	"github.com/dushixiang/pika/internal/models"
 	"github.com/dushixiang/pika/internal/scheduler"
+	"github.com/dushixiang/pika/pkg/replace"
 	"github.com/dushixiang/pika/web"
 	"github.com/google/uuid"
+	"github.com/spf13/afero/mem"
 
 	"github.com/go-errors/errors"
 	"github.com/go-orz/orz"
@@ -97,6 +101,10 @@ func setupApi(app *orz.App, components *AppComponents) {
 	e.Use(middleware.Recover())
 	e.Use(ErrorHandler(logger))
 
+	indexTemplate, err := template.New("index").Parse(web.IndexHtml())
+	if err != nil {
+		logger.Fatal("failed to parse index.html", zap.Error(err))
+	}
 	// 静态文件服务
 	e.Use(middleware.StaticWithConfig(middleware.StaticConfig{
 		Skipper: func(c echo.Context) bool {
@@ -114,7 +122,28 @@ func setupApi(app *orz.App, components *AppComponents) {
 		HTML5:      true,
 		Browse:     false,
 		IgnoreBase: false,
-		Filesystem: http.FS(web.Assets()),
+		Filesystem: replace.FS(http.FS(web.Assets()), func(name string, file http.File) (http.File, error) {
+			if name == "index.html" {
+				fileData := mem.CreateFile(name)
+				fileHandle := mem.NewFileHandle(fileData)
+
+				systemConfig, err := components.PropertyService.GetSystemConfig(context.Background())
+				if err != nil {
+					return file, nil
+				}
+
+				var buf bytes.Buffer
+				err = indexTemplate.Execute(&buf, systemConfig)
+				if err != nil {
+					return file, err
+				}
+				if _, err := fileHandle.Write(buf.Bytes()); err != nil {
+					return nil, err
+				}
+				return fileHandle, nil
+			}
+			return file, nil
+		}),
 	}))
 
 	customValidator := CustomValidator{Validator: validator.New()}
@@ -154,8 +183,8 @@ func setupApi(app *orz.App, components *AppComponents) {
 		publicApiWithOptionalAuth.GET("/monitors/:id/stats", components.MonitorHandler.GetStatsByID)
 		publicApiWithOptionalAuth.GET("/monitors/:id/history", components.MonitorHandler.GetHistoryByID)
 
-		// 系统配置（公开访问）- 用于公共页面显示系统名称和 Logo
-		publicApiWithOptionalAuth.GET("/system-config", components.PropertyHandler.GetSystemConfig)
+		// Logo（公开访问）- 用于公共页面只获取 Logo
+		publicApiWithOptionalAuth.GET("/logo", components.PropertyHandler.GetLogo)
 	}
 
 	// WebSocket 路由（探针连接）

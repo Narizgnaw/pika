@@ -15,6 +15,8 @@ import (
 const (
 	// PropertyIDNotificationChannels 通知渠道配置的固定 ID
 	PropertyIDNotificationChannels = "notification_channels"
+	// PropertyIDSystemConfig 系统配置的固定 ID
+	PropertyIDSystemConfig = "system_config"
 )
 
 type PropertyService struct {
@@ -78,4 +80,13 @@ func (s *PropertyService) GetNotificationChannelConfigs(ctx context.Context) ([]
 		return nil, fmt.Errorf("获取通知渠道配置失败: %w", err)
 	}
 	return allChannels, nil
+}
+
+func (s *PropertyService) GetSystemConfig(ctx context.Context) (*models.SystemConfig, error) {
+	var systemConfig models.SystemConfig
+	err := s.GetValue(ctx, PropertyIDSystemConfig, &systemConfig)
+	if err != nil {
+		return nil, fmt.Errorf("获取系统配置失败: %w", err)
+	}
+	return &systemConfig, nil
 }

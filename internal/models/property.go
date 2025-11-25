@@ -25,3 +25,9 @@ type NotificationChannelConfig struct {
 // wecom:    { "secretKey": "xxx" }
 // feishu:   { "secretKey": "xxx", "signSecret": "xxx" }
 // webhook:  { "url": "https://..." }
+
+type SystemConfig struct {
+	SystemNameZh string `json:"systemNameZh"` // 系统名称（中文）
+	SystemNameEn string `json:"systemNameEn"` // 系统名称（英文）
+	LogoBase64   string `json:"logoBase64"`   // 系统logo（base64编码）
+}
