@@ -109,6 +109,18 @@ func (r *AlertRepo) ListAlertRecords(ctx context.Context, agentID string, limit 
 	return records, total, err
 }
 
+// GetAlertRecordByID 根据记录ID获取告警记录
+func (r *AlertRepo) GetAlertRecordByID(ctx context.Context, id int64) (*models.AlertRecord, error) {
+	var record models.AlertRecord
+	err := r.db.WithContext(ctx).
+		Where("id = ?", id).
+		First(&record).Error
+	if err != nil {
+		return nil, err
+	}
+	return &record, nil
+}
+
 // GetLatestAlertRecord 获取最新的告警记录
 func (r *AlertRepo) GetLatestAlertRecord(ctx context.Context, configID string, alertType string) (*models.AlertRecord, error) {
 	var record models.AlertRecord
