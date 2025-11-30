@@ -547,10 +547,9 @@ func (r *MetricRepo) GetAggregatedMonitorMetrics(ctx context.Context, monitorID 
 	return metrics, err
 }
 
-// AggregatedDiskIOMetric 磁盘IO聚合指标
+// AggregatedDiskIOMetric 磁盘IO聚合指标（所有磁盘汇总）
 type AggregatedDiskIOMetric struct {
 	Timestamp         int64   `json:"timestamp"`
-	Device            string  `json:"device"`
 	MaxReadRate       float64 `json:"maxReadRate"`       // 最大读取速率(字节/秒)
 	MaxWriteRate      float64 `json:"maxWriteRate"`      // 最大写入速率(字节/秒)
 	TotalReadBytes    uint64  `json:"totalReadBytes"`    // 总读取字节数
@@ -558,29 +557,30 @@ type AggregatedDiskIOMetric struct {
 	MaxIopsInProgress uint64  `json:"maxIopsInProgress"` // 最大进行中的IO操作数
 }
 
-// GetDiskIOMetrics 获取聚合后的磁盘IO指标
+// GetDiskIOMetrics 获取聚合后的磁盘IO指标（汇总所有磁盘）
 func (r *MetricRepo) GetDiskIOMetrics(ctx context.Context, agentID string, start, end int64, interval int) ([]AggregatedDiskIOMetric, error) {
 	var metrics []AggregatedDiskIOMetric
 
-	// 计算速率需要根据时间差来计算，这里简化处理，直接计算平均值
 	query := `
 		SELECT
 			CAST(FLOOR(timestamp / ?) * ? AS BIGINT) as timestamp,
-			device,
-			MAX(read_bytes_rate) as max_read_rate,
-			MAX(write_bytes_rate) as max_write_rate,
-			CASE
-				WHEN MAX(read_bytes) >= MIN(read_bytes) THEN MAX(read_bytes) - MIN(read_bytes)
-				ELSE MAX(read_bytes)
-			END as total_read_bytes,
-			CASE
-				WHEN MAX(write_bytes) >= MIN(write_bytes) THEN MAX(write_bytes) - MIN(write_bytes)
-				ELSE MAX(write_bytes)
-			END as total_write_bytes
+			SUM(read_bytes_rate) as max_read_rate,
+			SUM(write_bytes_rate) as max_write_rate,
+			SUM(CASE
+				WHEN read_bytes >= LAG(read_bytes) OVER (PARTITION BY device ORDER BY timestamp)
+				THEN read_bytes - LAG(read_bytes) OVER (PARTITION BY device ORDER BY timestamp)
+				ELSE 0
+			END) as total_read_bytes,
+			SUM(CASE
+				WHEN write_bytes >= LAG(write_bytes) OVER (PARTITION BY device ORDER BY timestamp)
+				THEN write_bytes - LAG(write_bytes) OVER (PARTITION BY device ORDER BY timestamp)
+				ELSE 0
+			END) as total_write_bytes,
+			MAX(iops_in_progress) as max_iops_in_progress
 		FROM disk_io_metrics
 		WHERE agent_id = ? AND timestamp >= ? AND timestamp <= ?
-		GROUP BY 1, device
-		ORDER BY timestamp ASC, device
+		GROUP BY 1
+		ORDER BY timestamp ASC
 	`
 
 	intervalMs := int64(interval * 1000)
@@ -858,26 +858,25 @@ func (r *MetricRepo) AggregateNetworkConnectionToAgg(ctx context.Context, bucket
 	`, bucketSeconds, bucketMs, bucketMs, start, end).Error
 }
 
-// AggregateDiskIOToAgg 将原始磁盘IO数据聚合到聚合表
+// AggregateDiskIOToAgg 将原始磁盘IO数据聚合到聚合表（汇总所有磁盘）
 func (r *MetricRepo) AggregateDiskIOToAgg(ctx context.Context, bucketSeconds int, start, end int64) error {
 	bucketMs := int64(bucketSeconds * 1000)
 	return r.db.WithContext(ctx).Exec(`
 		INSERT INTO disk_io_metrics_aggs (
-			agent_id, bucket_seconds, bucket_start, device,
+			agent_id, bucket_seconds, bucket_start,
 			max_read_bytes_rate, max_write_bytes_rate, max_iops_in_progress
 		)
 		SELECT
 			agent_id,
 			? as bucket_seconds,
 			(timestamp / ?) * ? as bucket_start,
-			device,
-			MAX(read_bytes_rate) as max_read_bytes_rate,
-			MAX(write_bytes_rate) as max_write_bytes_rate,
+			SUM(read_bytes_rate) as max_read_bytes_rate,
+			SUM(write_bytes_rate) as max_write_bytes_rate,
 			MAX(iops_in_progress) as max_iops_in_progress
 		FROM disk_io_metrics
 		WHERE timestamp >= ? AND timestamp < ?
-		GROUP BY agent_id, bucket_start, device
-		ON CONFLICT (agent_id, bucket_seconds, bucket_start, device) DO UPDATE SET
+		GROUP BY agent_id, bucket_start
+		ON CONFLICT (agent_id, bucket_seconds, bucket_start) DO UPDATE SET
 			max_read_bytes_rate = EXCLUDED.max_read_bytes_rate,
 			max_write_bytes_rate = EXCLUDED.max_write_bytes_rate,
 			max_iops_in_progress = EXCLUDED.max_iops_in_progress
@@ -1003,17 +1002,17 @@ func (r *MetricRepo) GetNetworkConnectionMetricsAgg(ctx context.Context, agentID
 	return metrics, err
 }
 
-// GetDiskIOMetricsAgg 从聚合表获取磁盘IO指标
+// GetDiskIOMetricsAgg 从聚合表获取磁盘IO指标（汇总所有磁盘）
 func (r *MetricRepo) GetDiskIOMetricsAgg(ctx context.Context, agentID string, start, end int64, bucketSeconds int) ([]AggregatedDiskIOMetric, error) {
 	var metrics []AggregatedDiskIOMetric
 	err := r.db.WithContext(ctx).
 		Table("disk_io_metrics_aggs").
-		Select(`bucket_start as timestamp, device,
+		Select(`bucket_start as timestamp,
 			max_read_bytes_rate as max_read_rate,
 			max_write_bytes_rate as max_write_rate,
 			max_iops_in_progress`).
 		Where("agent_id = ? AND bucket_seconds = ? AND bucket_start >= ? AND bucket_start < ?", agentID, bucketSeconds, start, end).
-		Order("bucket_start, device").
+		Order("bucket_start").
 		Scan(&metrics).Error
 	return metrics, err
 }

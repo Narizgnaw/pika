@@ -270,13 +270,12 @@ func (AggregatedNetworkConnectionMetricModel) TableName() string {
 	return "network_connection_metrics_aggs"
 }
 
-// AggregatedDiskIOMetricModel 磁盘IO聚合表
+// AggregatedDiskIOMetricModel 磁盘IO聚合表（汇总所有磁盘）
 type AggregatedDiskIOMetricModel struct {
 	ID                uint   `gorm:"primaryKey;autoIncrement" json:"id"`
-	AgentID           string `gorm:"index:idx_diskioagg_agent_bucket_dev,priority:1;uniqueIndex:ux_diskioagg_bucket,priority:1" json:"agentId"`
-	BucketSeconds     int    `gorm:"index:idx_diskioagg_agent_bucket_dev,priority:2;uniqueIndex:ux_diskioagg_bucket,priority:2" json:"bucketSeconds"`
-	BucketStart       int64  `gorm:"index:idx_diskioagg_agent_bucket_dev,priority:3;uniqueIndex:ux_diskioagg_bucket,priority:3" json:"bucketStart"` // 毫秒
-	Device            string `gorm:"index:idx_diskioagg_agent_bucket_dev,priority:4;uniqueIndex:ux_diskioagg_bucket,priority:4" json:"device"`
+	AgentID           string `gorm:"index:idx_diskioagg_agent_bucket,priority:1;uniqueIndex:ux_diskioagg_bucket,priority:1" json:"agentId"`
+	BucketSeconds     int    `gorm:"index:idx_diskioagg_agent_bucket,priority:2;uniqueIndex:ux_diskioagg_bucket,priority:2" json:"bucketSeconds"`
+	BucketStart       int64  `gorm:"index:idx_diskioagg_agent_bucket,priority:3;uniqueIndex:ux_diskioagg_bucket,priority:3" json:"bucketStart"` // 毫秒
 	MaxReadBytesRate  uint64 `json:"maxReadBytesRate"`
 	MaxWriteBytesRate uint64 `json:"maxWriteBytesRate"`
 	MaxIopsInProgress uint64 `json:"maxIopsInProgress"`
