@@ -450,10 +450,16 @@ const CustomTooltip = ({active, payload, label, unit = '%'}: MetricsTooltipProps
         return null;
     }
 
+    // 从 payload 中获取完整的时间戳信息（如果有的话）
+    const fullTimestamp = payload[0]?.payload?.timestamp;
+    const displayLabel = fullTimestamp
+        ? dayjs(fullTimestamp).format('YYYY-MM-DD HH:mm:ss')
+        : label;
+
     return (
         <div
             className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs">
-            <p className="font-semibold text-slate-700 dark:text-slate-200">{label}</p>
+            <p className="font-semibold text-slate-700 dark:text-slate-200">{displayLabel}</p>
             <div className="mt-1 space-y-1">
                 {payload.map((entry, index) => {
                     if (!entry) {
@@ -517,6 +523,7 @@ const ServerDetail = () => {
                     minute: '2-digit',
                 }),
                 usage: Number(item.maxUsage.toFixed(2)),
+                timestamp: item.timestamp,
             })),
         [metricsData.cpu]
     );
@@ -529,6 +536,7 @@ const ServerDetail = () => {
                     minute: '2-digit',
                 }),
                 usage: Number(item.maxUsage.toFixed(2)),
+                timestamp: item.timestamp,
             })),
         [metricsData.memory]
     );
@@ -585,7 +593,7 @@ const ServerDetail = () => {
             });
 
             if (!acc[time]) {
-                acc[time] = {time};
+                acc[time] = {time, timestamp: item.timestamp};
             }
 
             // 后端已经根据 interface 参数返回了对应的数据
@@ -605,7 +613,7 @@ const ServerDetail = () => {
 
     // Disk I/O 图表数据（汇总所有磁盘）
     const diskIOChartData = useMemo(() => {
-        const aggregated: Record<string, { time: string; read: number; write: number }> = {};
+        const aggregated: Record<string, { time: string; read: number; write: number; timestamp: number }> = {};
 
         metricsData.diskIO.forEach((item) => {
             const time = new Date(item.timestamp).toLocaleTimeString('zh-CN', {
@@ -614,7 +622,7 @@ const ServerDetail = () => {
             });
 
             if (!aggregated[time]) {
-                aggregated[time] = {time, read: 0, write: 0};
+                aggregated[time] = {time, read: 0, write: 0, timestamp: item.timestamp};
             }
 
             // 转换为 MB/s
@@ -635,7 +643,8 @@ const ServerDetail = () => {
             time: string;
             utilization: number;
             temperature: number;
-            count: number
+            count: number;
+            timestamp: number;
         }> = {};
 
         metricsData.gpu.forEach((item) => {
@@ -645,7 +654,7 @@ const ServerDetail = () => {
             });
 
             if (!aggregated[time]) {
-                aggregated[time] = {time, utilization: 0, temperature: 0, count: 0};
+                aggregated[time] = {time, utilization: 0, temperature: 0, count: 0, timestamp: item.timestamp};
             }
 
             aggregated[time].utilization += item.maxUtilization;
@@ -657,12 +666,13 @@ const ServerDetail = () => {
             time: item.time,
             utilization: Number((item.utilization / item.count).toFixed(2)),
             temperature: Number((item.temperature / item.count).toFixed(2)),
+            timestamp: item.timestamp,
         }));
     }, [metricsData.gpu]);
 
     // Temperature 图表数据（所有传感器的平均温度）
     const temperatureChartData = useMemo(() => {
-        const aggregated: Record<string, { time: string; temperature: number; count: number }> = {};
+        const aggregated: Record<string, { time: string; temperature: number; count: number; timestamp: number }> = {};
 
         metricsData.temperature.forEach((item) => {
             const time = new Date(item.timestamp).toLocaleTimeString('zh-CN', {
@@ -671,7 +681,7 @@ const ServerDetail = () => {
             });
 
             if (!aggregated[time]) {
-                aggregated[time] = {time, temperature: 0, count: 0};
+                aggregated[time] = {time, temperature: 0, count: 0, timestamp: item.timestamp};
             }
 
             aggregated[time].temperature += item.maxTemperature;
@@ -681,6 +691,7 @@ const ServerDetail = () => {
         return Object.values(aggregated).map((item) => ({
             time: item.time,
             temperature: Number((item.temperature / item.count).toFixed(2)),
+            timestamp: item.timestamp,
         }));
     }, [metricsData.temperature]);
 
@@ -1266,6 +1277,7 @@ const ServerDetail = () => {
                                             timeWait: item.maxTimeWait,
                                             closeWait: item.maxCloseWait,
                                             listen: item.maxListen,
+                                            timestamp: item.timestamp,
                                         }))}>
                                             <CartesianGrid stroke="currentColor" strokeDasharray="4 4"
                                                            className="stroke-slate-200 dark:stroke-slate-600"/>

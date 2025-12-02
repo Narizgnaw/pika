@@ -240,10 +240,23 @@ const CustomTooltip = ({active, payload, label, unit = ' ms'}: TooltipProps<numb
         return null;
     }
 
+    // 从 payload 中获取完整的时间戳信息（如果有的话）
+    const fullTimestamp = payload[0]?.payload?.timestamp;
+    const displayLabel = fullTimestamp
+        ? new Date(fullTimestamp).toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        })
+        : label;
+
     return (
         <div
             className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs">
-            <p className="font-semibold text-slate-700 dark:text-slate-200">{label}</p>
+            <p className="font-semibold text-slate-700 dark:text-slate-200">{displayLabel}</p>
             <div className="mt-1 space-y-1">
                 {payload.map((entry, index) => {
                     if (!entry) {
@@ -394,7 +407,7 @@ const MonitorDetail = () => {
             });
 
             if (!acc[time]) {
-                acc[time] = {time};
+                acc[time] = {time, timestamp: item.timestamp};
             }
 
             // 根据选择的探针过滤
