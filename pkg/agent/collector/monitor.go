@@ -277,9 +277,14 @@ func (c *MonitorCollector) checkICMP(item protocol.MonitorItem) protocol.Monitor
 	// 执行 Ping
 	err = pinger.Run()
 	if err != nil {
-		result.Status = "down"
-		result.Error = fmt.Sprintf("ping failed: %v", err)
-		return result
+		// 如果非特权模式失败，尝试特权模式（需要 root 权限或 CAP_NET_RAW）
+		pinger.SetPrivileged(true)
+		err = pinger.Run()
+		if err != nil {
+			result.Status = "down"
+			result.Error = fmt.Sprintf("ping failed: %v", err)
+			return result
+		}
 	}
 
 	// 获取统计信息
