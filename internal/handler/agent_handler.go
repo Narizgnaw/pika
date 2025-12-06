@@ -805,16 +805,9 @@ echo_warn() {
     echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
-# 检查是否为 root 用户
-if [ "$EUID" -ne 0 ]; then
-    echo_error "请使用 root 权限运行此脚本"
-    echo_info "使用方式: sudo bash install.sh"
-    exit 1
-fi
-
 # 检测操作系统和架构
 detect_platform() {
-    OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+    OS=$(uname -s | awk '{print tolower($0)}')
     ARCH=$(uname -m)
 
     case "$ARCH" in
