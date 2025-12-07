@@ -184,11 +184,11 @@ const MonitorList = () => {
 
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between text-xs">
-                                    <span className="font-medium text-slate-600 dark:text-slate-300">30d 在线率</span>
+                                    <span className="font-medium text-slate-600 dark:text-slate-300">7d 在线率</span>
                                     <span
-                                        className="font-semibold text-slate-900 dark:text-slate-100">{formatPercentValue(stats.uptime30d)}%</span>
+                                        className="font-semibold text-slate-900 dark:text-slate-100">{formatPercentValue(stats.uptime7d)}%</span>
                                 </div>
-                                <UptimeBar uptime={stats.uptime30d}/>
+                                <UptimeBar uptime={stats.uptime7d}/>
                             </div>
 
                             {hasCert && (
@@ -258,7 +258,7 @@ const MonitorList = () => {
                         <th className="px-5 py-3">当前响应</th>
                         <th className="px-5 py-3">24h 平均响应</th>
                         <th className="px-5 py-3">24h 在线率</th>
-                        <th className="px-5 py-3">30d 在线率</th>
+                        <th className="px-5 py-3">7d 在线率</th>
                         <th className="px-5 py-3">证书信息</th>
                     </tr>
                     </thead>
@@ -328,10 +328,10 @@ const MonitorList = () => {
                                     <div className="flex flex-col gap-2">
                                         <div className="flex items-center gap-3">
                                             <div className="w-24">
-                                                <UptimeBar uptime={stats.uptime30d}/>
+                                                <UptimeBar uptime={stats.uptime7d}/>
                                             </div>
                                             <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 w-14 text-right">
-                                                    {formatPercentValue(stats.uptime30d)}%
+                                                    {formatPercentValue(stats.uptime7d)}%
                                                 </span>
                                         </div>
                                     </div>

@@ -439,7 +439,7 @@ const MonitorDetail = () => {
         {label: '监控类型', value: monitorDetail.type.toUpperCase()},
         {label: '探针数量', value: `${monitorDetail.agentCount} 个`},
         {label: '24h在线率', value: `${formatPercentValue(monitorDetail.uptime24h)}%`},
-        {label: '30d在线率', value: `${formatPercentValue(monitorDetail.uptime30d)}%`},
+        {label: '7d在线率', value: `${formatPercentValue(monitorDetail.uptime7d)}%`},
     ];
 
     return (
@@ -528,9 +528,9 @@ const MonitorDetail = () => {
                             />
                             <StatCard
                                 icon={<CheckCircle2 className="h-6 w-6"/>}
-                                label="30d 在线率"
-                                value={`${formatPercentValue(monitorDetail.uptime30d)}%`}
-                                color={monitorDetail.uptime30d >= 99 ? 'emerald' : monitorDetail.uptime30d >= 95 ? 'amber' : 'rose'}
+                                label="7d 在线率"
+                                value={`${formatPercentValue(monitorDetail.uptime7d)}%`}
+                                color={monitorDetail.uptime7d >= 99 ? 'emerald' : monitorDetail.uptime7d >= 95 ? 'amber' : 'rose'}
                             />
                         </div>
 
@@ -734,7 +734,7 @@ const MonitorDetail = () => {
                                                 24h 在线率
                                             </th>
                                             <th className="whitespace-nowrap px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 hidden lg:table-cell">
-                                                30d 在线率
+                                                7d 在线率
                                             </th>
                                             <th className="whitespace-nowrap px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 hidden md:table-cell">
                                                 24h 检测
@@ -801,7 +801,7 @@ const MonitorDetail = () => {
                                                     </td>
                                                     <td className="whitespace-nowrap px-4 sm:px-6 py-3 sm:py-4 hidden lg:table-cell">
                                                         <div className="w-24 sm:w-32">
-                                                            <UptimeBar uptime={stats.uptime30d}/>
+                                                            <UptimeBar uptime={stats.uptime7d}/>
                                                         </div>
                                                     </td>
                                                     <td className="whitespace-nowrap px-4 sm:px-6 py-3 sm:py-4 hidden md:table-cell">

@@ -289,7 +289,7 @@ export interface PublicMonitor {
     currentResponse: number;
     avgResponse24h: number;
     uptime24h: number;
-    uptime30d: number;
+    uptime7d: number;
     certExpiryDate: number;
     certExpiryDays: number;
     lastCheckTime: number;
@@ -307,13 +307,13 @@ export interface MonitorStats {
     currentResponse: number;      // 当前响应时间(ms)
     avgResponse24h: number;       // 24小时平均响应时间(ms)
     uptime24h: number;            // 24小时在线率(百分比)
-    uptime30d: number;            // 30天在线率(百分比)
+    uptime7d: number;             // 7天在线率(百分比)
     certExpiryDate: number;       // 证书过期时间(毫秒时间戳)
     certExpiryDays: number;       // 证书剩余天数
     totalChecks24h: number;       // 24小时总检测次数
     successChecks24h: number;     // 24小时成功次数
-    totalChecks30d: number;       // 30天总检测次数
-    successChecks30d: number;     // 30天成功次数
+    totalChecks7d: number;        // 7天总检测次数
+    successChecks7d: number;      // 7天成功次数
     lastCheckTime: number;        // 最后检测时间
     lastCheckStatus: string;      // 最后检测状态: up/down
     lastCheckError?: string;      // 最后检测错误信息

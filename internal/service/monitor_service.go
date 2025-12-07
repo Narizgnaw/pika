@@ -99,7 +99,7 @@ type PublicMonitorOverview struct {
 	CurrentResponse  int64    `json:"currentResponse"`
 	AvgResponse24h   int64    `json:"avgResponse24h"`
 	Uptime24h        float64  `json:"uptime24h"`
-	Uptime30d        float64  `json:"uptime30d"`
+	Uptime7d         float64  `json:"uptime7d"`
 	CertExpiryDate   int64    `json:"certExpiryDate"`
 	CertExpiryDays   int      `json:"certExpiryDays"`
 	LastCheckTime    int64    `json:"lastCheckTime"`
@@ -343,7 +343,7 @@ func (s *MonitorService) buildMonitorOverview(monitor models.MonitorTask, summar
 		CurrentResponse:  summary.CurrentResponse,
 		AvgResponse24h:   summary.AvgResponse24h,
 		Uptime24h:        summary.Uptime24h,
-		Uptime30d:        summary.Uptime30d,
+		Uptime7d:         summary.Uptime7d,
 		CertExpiryDate:   summary.CertExpiryDate,
 		CertExpiryDays:   summary.CertExpiryDays,
 		LastCheckTime:    summary.LastCheckTime,
@@ -357,7 +357,7 @@ type monitorOverviewSummary struct {
 	CurrentResponse int64
 	AvgResponse24h  int64
 	Uptime24h       float64
-	Uptime30d       float64
+	Uptime7d        float64
 	CertExpiryDate  int64
 	CertExpiryDays  int
 	LastCheckTime   int64
@@ -375,7 +375,7 @@ func aggregateMonitorStats(stats []models.MonitorStats) monitorOverviewSummary {
 	var totalCurrentResponse int64
 	var totalAvgResponse24h int64
 	var totalUptime24h float64
-	var totalUptime30d float64
+	var totalUptime7d float64
 	var lastCheckTime int64
 	var lastCheckError string
 	var certExpiryDate int64
@@ -388,7 +388,7 @@ func aggregateMonitorStats(stats []models.MonitorStats) monitorOverviewSummary {
 		totalCurrentResponse += stat.CurrentResponse
 		totalAvgResponse24h += stat.AvgResponse24h
 		totalUptime24h += stat.Uptime24h
-		totalUptime30d += stat.Uptime30d
+		totalUptime7d += stat.Uptime7d
 
 		// 记录最新的检测时间和对应的错误信息
 		if stat.LastCheckTime > lastCheckTime {
@@ -423,7 +423,7 @@ func aggregateMonitorStats(stats []models.MonitorStats) monitorOverviewSummary {
 		summary.CurrentResponse = totalCurrentResponse / int64(count)
 		summary.AvgResponse24h = totalAvgResponse24h / int64(count)
 		summary.Uptime24h = totalUptime24h / float64(count)
-		summary.Uptime30d = totalUptime30d / float64(count)
+		summary.Uptime7d = totalUptime7d / float64(count)
 	}
 	summary.LastCheckTime = lastCheckTime
 	summary.LastCheckError = lastCheckError
@@ -667,9 +667,9 @@ func (s *MonitorService) calculateStatsForAgentMonitor(ctx context.Context, agen
 		return nil, err
 	}
 
-	// 计算30天数据
-	start30d := now.Add(-30 * 24 * time.Hour).UnixMilli()
-	metrics30d, err := s.metricRepo.GetMonitorMetrics(ctx, agentID, monitorId, start30d, end)
+	// 计算7天数据
+	start7d := now.Add(-7 * 24 * time.Hour).UnixMilli()
+	metrics7d, err := s.metricRepo.GetMonitorMetrics(ctx, agentID, monitorId, start7d, end)
 	if err != nil {
 		return nil, err
 	}
@@ -709,19 +709,19 @@ func (s *MonitorService) calculateStatsForAgentMonitor(ctx context.Context, agen
 		}
 	}
 
-	// 计算30天统计
-	if len(metrics30d) > 0 {
+	// 计算7天统计
+	if len(metrics7d) > 0 {
 		var successCount int64
-		for _, metric := range metrics30d {
+		for _, metric := range metrics7d {
 			if metric.Status == "up" {
 				successCount++
 			}
 		}
 
-		stats.TotalChecks30d = int64(len(metrics30d))
-		stats.SuccessChecks30d = successCount
-		if stats.TotalChecks30d > 0 {
-			stats.Uptime30d = float64(successCount) / float64(stats.TotalChecks30d) * 100
+		stats.TotalChecks7d = int64(len(metrics7d))
+		stats.SuccessChecks7d = successCount
+		if stats.TotalChecks7d > 0 {
+			stats.Uptime7d = float64(successCount) / float64(stats.TotalChecks7d) * 100
 		}
 	}
 

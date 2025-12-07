@@ -12,13 +12,13 @@ type MonitorStats struct {
 	CurrentResponse  int64   `json:"currentResponse"`                       // 当前响应时间(ms)
 	AvgResponse24h   int64   `json:"avgResponse24h"`                        // 24小时平均响应时间(ms)
 	Uptime24h        float64 `json:"uptime24h"`                             // 24小时在线率(百分比)
-	Uptime30d        float64 `json:"uptime30d"`                             // 30天在线率(百分比)
+	Uptime7d         float64 `json:"uptime7d"`                              // 7天在线率(百分比)
 	CertExpiryDate   int64   `json:"certExpiryDate"`                        // 证书过期时间(毫秒时间戳)，0表示无证书
 	CertExpiryDays   int     `json:"certExpiryDays"`                        // 证书剩余天数
 	TotalChecks24h   int64   `json:"totalChecks24h"`                        // 24小时总检测次数
 	SuccessChecks24h int64   `json:"successChecks24h"`                      // 24小时成功次数
-	TotalChecks30d   int64   `json:"totalChecks30d"`                        // 30天总检测次数
-	SuccessChecks30d int64   `json:"successChecks30d"`                      // 30天成功次数
+	TotalChecks7d    int64   `json:"totalChecks7d"`                         // 7天总检测次数
+	SuccessChecks7d  int64   `json:"successChecks7d"`                       // 7天成功次数
 	LastCheckTime    int64   `json:"lastCheckTime"`                         // 最后检测时间
 	LastCheckStatus  string  `json:"lastCheckStatus"`                       // 最后检测状态: up/down
 	LastCheckError   string  `json:"lastCheckError"`                        // 最后检测错误信息
