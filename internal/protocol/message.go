@@ -2,10 +2,16 @@ package protocol
 
 import "encoding/json"
 
-// Message WebSocket消息结构
-type Message struct {
+// InputMessage WebSocket消息结构（主要用于接收）
+type InputMessage struct {
 	Type MessageType     `json:"type"`
 	Data json.RawMessage `json:"data"`
+}
+
+// OutboundMessage WebSocket 出站消息结构
+type OutboundMessage struct {
+	Type MessageType `json:"type"`
+	Data interface{} `json:"data"`
 }
 
 // RegisterRequest 注册请求
@@ -31,12 +37,11 @@ type AgentInfo struct {
 	Version  string `json:"version"`  // 版本号
 }
 
-// MetricsWrapper 指标数据包装
-type MetricsWrapper struct {
-	Type MetricType      `json:"type"`
-	Data json.RawMessage `json:"data"`
+// MetricsPayload 指标数据包装，发送端/接收端统一使用
+type MetricsPayload struct {
+	Type MetricType  `json:"type"`
+	Data interface{} `json:"data"`
 }
-
 type MessageType string
 
 // 控制消息

@@ -258,7 +258,7 @@ func (a *Agent) readLoop(conn *websocket.Conn, done chan struct{}) error {
 		}
 
 		// 解析消息
-		var msg protocol.Message
+		var msg protocol.InputMessage
 		if err := json.Unmarshal(message, &msg); err != nil {
 			log.Printf("⚠️  解析消息失败: %v", err)
 			continue
@@ -313,22 +313,15 @@ func (a *Agent) registerAgent(conn *safeConn) error {
 		ApiKey: a.cfg.Server.APIKey,
 	}
 
-	reqData, err := json.Marshal(registerReq)
-	if err != nil {
-		return fmt.Errorf("序列化注册请求失败: %w", err)
-	}
-
-	msg := protocol.Message{
+	if err := conn.WriteJSON(protocol.OutboundMessage{
 		Type: protocol.MessageTypeRegister,
-		Data: reqData,
-	}
-
-	if err := conn.WriteJSON(msg); err != nil {
+		Data: registerReq,
+	}); err != nil {
 		return fmt.Errorf("发送注册消息失败: %w", err)
 	}
 
 	// 读取注册响应
-	var response protocol.Message
+	var response protocol.InputMessage
 	if err := conn.ReadJSON(&response); err != nil {
 		return fmt.Errorf("读取注册响应失败: %w", err)
 	}
@@ -392,11 +385,10 @@ func (a *Agent) heartbeatLoop(ctx context.Context, conn *safeConn, done chan str
 	for {
 		select {
 		case <-ticker.C:
-			msg := protocol.Message{
+			if err := conn.WriteJSON(protocol.OutboundMessage{
 				Type: protocol.MessageTypeHeartbeat,
-				Data: json.RawMessage(`{}`),
-			}
-			if err := conn.WriteJSON(msg); err != nil {
+				Data: struct{}{},
+			}); err != nil {
 				return fmt.Errorf("发送心跳失败: %w", err)
 			}
 			//log.Println("💓 心跳已发送")
@@ -581,24 +573,10 @@ func (a *Agent) sendCommandResponse(conn *safeConn, cmdID, cmdType, status, errM
 		Result: result,
 	}
 
-	respData, err := json.Marshal(resp)
-	if err != nil {
-		log.Printf("⚠️  序列化指令响应失败: %v", err)
-		return
-	}
-
-	msg := protocol.Message{
+	if err := conn.WriteJSON(protocol.OutboundMessage{
 		Type: protocol.MessageTypeCommandResp,
-		Data: respData,
-	}
-
-	msgData, err := json.Marshal(msg)
-	if err != nil {
-		log.Printf("⚠️  序列化消息失败: %v", err)
-		return
-	}
-
-	if err := conn.WriteMessage(websocket.TextMessage, msgData); err != nil {
+		Data: resp,
+	}); err != nil {
 		log.Printf("⚠️  发送指令响应失败: %v", err)
 	}
 }
@@ -670,18 +648,10 @@ func (a *Agent) sendTamperProtectResponse(success bool, message string, paths []
 		Error:   errMsg,
 	}
 
-	respData, err := json.Marshal(resp)
-	if err != nil {
-		log.Printf("⚠️  序列化防篡改保护响应失败: %v", err)
-		return
-	}
-
-	msg := protocol.Message{
+	if err := conn.WriteJSON(protocol.OutboundMessage{
 		Type: protocol.MessageTypeTamperProtect,
-		Data: respData,
-	}
-
-	if err := conn.WriteJSON(msg); err != nil {
+		Data: resp,
+	}); err != nil {
 		log.Printf("⚠️  发送防篡改保护响应失败: %v", err)
 	}
 }
@@ -705,18 +675,10 @@ func (a *Agent) tamperEventLoop(ctx context.Context, conn *safeConn, done chan s
 				Details:   event.Details,
 			}
 
-			data, err := json.Marshal(eventData)
-			if err != nil {
-				log.Printf("⚠️  序列化防篡改事件失败: %v", err)
-				continue
-			}
-
-			msg := protocol.Message{
+			if err := conn.WriteJSON(protocol.OutboundMessage{
 				Type: protocol.MessageTypeTamperEvent,
-				Data: data,
-			}
-
-			if err := conn.WriteJSON(msg); err != nil {
+				Data: eventData,
+			}); err != nil {
 				log.Printf("⚠️  发送防篡改事件失败: %v", err)
 			} else {
 				log.Printf("📤 已上报防篡改事件: %s - %s", event.Path, event.Operation)
@@ -744,18 +706,10 @@ func (a *Agent) tamperAlertLoop(ctx context.Context, conn *safeConn, done chan s
 				Restored:  alert.Restored,
 			}
 
-			data, err := json.Marshal(alertData)
-			if err != nil {
-				log.Printf("⚠️  序列化属性篡改告警失败: %v", err)
-				continue
-			}
-
-			msg := protocol.Message{
+			if err := conn.WriteJSON(protocol.OutboundMessage{
 				Type: protocol.MessageTypeTamperAlert,
-				Data: data,
-			}
-
-			if err := conn.WriteJSON(msg); err != nil {
+				Data: alertData,
+			}); err != nil {
 				log.Printf("⚠️  发送属性篡改告警失败: %v", err)
 			} else {
 				status := "未恢复"
@@ -829,18 +783,10 @@ func (a *Agent) collectAndSendDDNSIP(conn *safeConn, manager *collector.Manager,
 		return fmt.Errorf("未获取到任何 IP 地址")
 	}
 
-	// 序列化并发送
-	data, err := json.Marshal(ipReport)
-	if err != nil {
-		return fmt.Errorf("序列化 IP 报告失败: %w", err)
-	}
-
-	msg := protocol.Message{
+	if err := conn.WriteJSON(protocol.OutboundMessage{
 		Type: protocol.MessageTypeDDNSIPReport,
-		Data: data,
-	}
-
-	if err := conn.WriteJSON(msg); err != nil {
+		Data: ipReport,
+	}); err != nil {
 		return fmt.Errorf("发送 IP 报告失败: %w", err)
 	}
 

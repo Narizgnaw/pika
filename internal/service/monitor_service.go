@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -420,17 +419,10 @@ func (s *MonitorService) resolveTargetAgents(monitor models.MonitorTask, availab
 
 // sendMonitorConfigToAgent 向指定探针发送监控配置（内部方法）
 func (s *MonitorService) sendMonitorConfigToAgent(agentID string, payload protocol.MonitorConfigPayload) error {
-	payloadData, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	msg := protocol.Message{
+	msgData, err := json.Marshal(protocol.OutboundMessage{
 		Type: protocol.MessageTypeMonitorConfig,
-		Data: payloadData,
-	}
-
-	msgData, err := json.Marshal(msg)
+		Data: payload,
+	})
 	if err != nil {
 		return err
 	}
@@ -542,108 +534,17 @@ func (s *MonitorService) GetMonitorStatsByID(ctx context.Context, monitorID stri
 	return &overview, nil
 }
 
-type MonitorStats struct {
-	ID               string  `gorm:"primaryKey" json:"id"`                  // ID
-	AgentID          string  `json:"agentId"`                               // 探针ID
-	AgentName        string  `gorm:"-" json:"agentName,omitempty"`          // 探针名称（不存储在数据库，仅用于 API 返回）
-	MonitorId        string  `json:"monitorId"`                             // 监控项ID
-	MonitorName      string  `gorm:"-" json:"name"`                         // 监控项名称（不存储在数据库，仅用于 API 返回）
-	MonitorType      string  `json:"type"`                                  // 监控类型
-	Target           string  `json:"target"`                                // 目标地址
-	CurrentResponse  int64   `json:"currentResponse"`                       // 当前响应时间(ms)
-	AvgResponse24h   int64   `json:"avgResponse24h"`                        // 24小时平均响应时间(ms)
-	Uptime24h        float64 `json:"uptime24h"`                             // 24小时在线率(百分比)
-	Uptime7d         float64 `json:"uptime7d"`                              // 7天在线率(百分比)
-	CertExpiryDate   int64   `json:"certExpiryDate"`                        // 证书过期时间(毫秒时间戳)，0表示无证书
-	CertExpiryDays   int     `json:"certExpiryDays"`                        // 证书剩余天数
-	TotalChecks24h   int64   `json:"totalChecks24h"`                        // 24小时总检测次数
-	SuccessChecks24h int64   `json:"successChecks24h"`                      // 24小时成功次数
-	TotalChecks7d    int64   `json:"totalChecks7d"`                         // 7天总检测次数
-	SuccessChecks7d  int64   `json:"successChecks7d"`                       // 7天成功次数
-	LastCheckTime    int64   `json:"lastCheckTime"`                         // 最后检测时间
-	LastCheckStatus  string  `json:"lastCheckStatus"`                       // 最后检测状态: up/down
-	LastCheckError   string  `json:"lastCheckError"`                        // 最后检测错误信息
-	UpdatedAt        int64   `gorm:"autoUpdateTime:milli" json:"updatedAt"` // 更新时间
-}
-
 // GetMonitorAgentStats 获取监控任务各探针的统计数据（详细列表）
-func (s *MonitorService) GetMonitorAgentStats(ctx context.Context, monitorID string) ([]MonitorStats, error) {
-	// 查询监控任务
-	monitor, err := s.MonitorRepo.FindById(ctx, monitorID)
-	if err != nil {
-		return nil, err
-	}
-
-	// 从 VictoriaMetrics 查询各探针统计
-	agentStats, err := s.metricService.GetMonitorAgentStats(ctx, monitorID)
-	if err != nil {
-		s.logger.Error("查询 VictoriaMetrics 失败", zap.String("monitorID", monitorID), zap.Error(err))
-		return nil, err
-	}
-
-	// 填充探针名称、监控名称
-	agentMap := make(map[string]*models.Agent)
-	if len(agentStats) > 0 {
-		agentIDs := make([]string, 0, len(agentStats))
-		for _, stat := range agentStats {
-			agentIDs = append(agentIDs, stat.AgentID)
-		}
-		agents, _ := s.agentRepo.FindByIdIn(ctx, agentIDs)
-		for _, agent := range agents {
-			agentMap[agent.ID] = &agent
-		}
-	}
-
-	// 确定目标 target 值（是否隐藏）
-	target := monitor.Target
-	if !monitor.ShowTargetPublic {
-		target = "******"
-	}
-
-	// 转换为 MonitorStats 格式
-	result := make([]MonitorStats, 0, len(agentStats))
-	for _, stat := range agentStats {
-		ms := MonitorStats{
-			AgentID:          stat.AgentID,
-			AgentName:        "",
-			MonitorId:        monitorID,
-			MonitorName:      monitor.Name,
-			MonitorType:      monitor.Type,
-			Target:           target,
-			CurrentResponse:  stat.CurrentResponse,
-			AvgResponse24h:   stat.AvgResponse24h,
-			Uptime24h:        stat.Uptime24h,
-			Uptime7d:         stat.Uptime7d,
-			CertExpiryDate:   stat.CertExpiryDate,
-			CertExpiryDays:   stat.CertExpiryDays,
-			TotalChecks24h:   stat.TotalChecks24h,
-			SuccessChecks24h: stat.SuccessChecks24h,
-			TotalChecks7d:    stat.TotalChecks7d,
-			SuccessChecks7d:  stat.SuccessChecks7d,
-			LastCheckTime:    stat.LastCheckTime,
-			LastCheckStatus:  stat.LastCheckStatus,
-			LastCheckError:   stat.LastCheckError,
-		}
-
-		if agent, ok := agentMap[stat.AgentID]; ok {
-			ms.AgentName = agent.Name
-		}
-
-		result = append(result, ms)
-	}
-
-	return result, nil
+// 直接返回 VictoriaMetrics 查询结果，无需额外转换
+func (s *MonitorService) GetMonitorAgentStats(ctx context.Context, monitorID string) ([]AgentMonitorStat, error) {
+	// 直接返回 VictoriaMetrics 查询结果
+	return s.metricService.GetMonitorAgentStats(ctx, monitorID)
 }
 
-// GetMonitorHistory 获取监控任务的历史响应时间数据
-// 根据前端时间范围选择，直接使用聚合表数据
+// GetMonitorHistory 获取监控任务的历史时序数据
+// 直接返回 VictoriaMetrics 的原始时序数据，包含所有探针的独立序列
 // 支持时间范围：15m, 30m, 1h, 3h, 6h, 12h, 1d, 3d, 7d
-func (s *MonitorService) GetMonitorHistory(ctx context.Context, monitorID, timeRange string) ([]repo.AggregatedMonitorMetric, error) {
-	// 验证监控任务存在
-	if _, err := s.MonitorRepo.FindById(ctx, monitorID); err != nil {
-		return nil, err
-	}
-
+func (s *MonitorService) GetMonitorHistory(ctx context.Context, monitorID, timeRange string) (*GetMetricsResponse, error) {
 	// 计算时间范围
 	var duration time.Duration
 	switch timeRange {
@@ -673,67 +574,8 @@ func (s *MonitorService) GetMonitorHistory(ctx context.Context, monitorID, timeR
 	end := now.UnixMilli()
 	start := now.Add(-duration).UnixMilli()
 
-	// 从 VictoriaMetrics 查询历史数据
-	metricsResp, err := s.metricService.GetMonitorHistory(ctx, monitorID, start, end)
-	if err != nil {
-		s.logger.Error("查询 VictoriaMetrics 失败", zap.String("monitorID", monitorID), zap.Error(err))
-		return []repo.AggregatedMonitorMetric{}, nil
-	}
-
-	// 转换为 AggregatedMonitorMetric 格式
-	result := make([]repo.AggregatedMonitorMetric, 0)
-
-	// 按时间戳分组，聚合多个探针的数据
-	timestampMap := make(map[int64]map[string]float64) // timestamp -> agentID -> avgResponse
-
-	for _, series := range metricsResp.Series {
-		// 从 series.Labels 中提取 agent_id
-		agentID := ""
-		if series.Labels != nil {
-			agentID = series.Labels["agent_id"]
-		}
-		if agentID == "" && len(metricsResp.Series) > 0 {
-			// 如果没有 agent_id 标签，尝试从 series name 中提取
-			// 这是 response_time 系列，每个探针一条时间序列
-			// series.Name 可能包含探针信息
-			agentID = series.Name
-		}
-
-		for _, dataPoint := range series.Data {
-			if timestampMap[dataPoint.Timestamp] == nil {
-				timestampMap[dataPoint.Timestamp] = make(map[string]float64)
-			}
-			timestampMap[dataPoint.Timestamp][agentID] = dataPoint.Value
-		}
-	}
-
-	// 将 map 转换为数组，并计算每个时间点的聚合数据
-	for timestamp, agentData := range timestampMap {
-		var totalResponse float64
-		var count int
-		for _, avgResp := range agentData {
-			totalResponse += avgResp
-			count++
-		}
-
-		var avgResponse float64
-		if count > 0 {
-			avgResponse = totalResponse / float64(count)
-		}
-
-		result = append(result, repo.AggregatedMonitorMetric{
-			Timestamp:   timestamp,
-			AgentID:     "", // 聚合数据不指定单个 agentID
-			AvgResponse: avgResponse,
-		})
-	}
-
-	// 按时间戳排序
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Timestamp < result[j].Timestamp
-	})
-
-	return result, nil
+	// 直接返回 VictoriaMetrics 查询结果，无需任何转换
+	return s.metricService.GetMonitorHistory(ctx, monitorID, start, end)
 }
 
 // GetMonitorByAuth 根据认证状态获取监控任务（已登录返回全部，未登录返回公开可见）

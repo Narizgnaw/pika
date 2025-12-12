@@ -16,12 +16,13 @@ import {
 import type {TooltipProps} from 'recharts';
 import {Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,} from 'recharts';
 import {
-    type AggregatedMonitorMetric,
+    type AgentMonitorStat,
+    type GetMetricsResponse,
     getMonitorAgentStats,
     getMonitorHistory,
     getMonitorStatsById
 } from '@/api/monitor.ts';
-import type {MonitorStats, PublicMonitor} from '@/types';
+import type {PublicMonitor} from '@/types';
 import {cn} from '@/lib/utils';
 
 const formatTime = (ms: number): string => {
@@ -357,7 +358,7 @@ const MonitorDetail = () => {
     });
 
     // 获取各探针的统计数据
-    const {data: monitorStats = []} = useQuery<MonitorStats[]>({
+    const {data: monitorStats = []} = useQuery<AgentMonitorStat[]>({
         queryKey: ['monitorAgentStats', id],
         queryFn: async () => {
             if (!id) return [];
@@ -369,12 +370,12 @@ const MonitorDetail = () => {
     });
 
     // 获取历史数据
-    const {data: historyData = []} = useQuery<AggregatedMonitorMetric[]>({
+    const {data: historyData} = useQuery<GetMetricsResponse>({
         queryKey: ['monitorHistory', id, timeRange],
         queryFn: async () => {
-            if (!id) return [];
+            if (!id) throw new Error('Monitor ID is required');
             const response = await getMonitorHistory(id, timeRange);
-            return response.data || [];
+            return response.data;
         },
         refetchInterval: 30000,
         enabled: !!id,
@@ -384,8 +385,8 @@ const MonitorDetail = () => {
     const availableAgents = useMemo(() => {
         if (monitorStats.length === 0) return [];
         return monitorStats.map(stat => ({
-            id: stat.agentId,
-            label: stat.agentName || stat.agentId.substring(0, 8),
+            id: stat.agentID,
+            label: stat.agentID.substring(0, 8),
         }));
     }, [monitorStats]);
 
@@ -401,30 +402,42 @@ const MonitorDetail = () => {
 
     // 生成图表数据
     const chartData = useMemo(() => {
-        if (historyData.length === 0) return [];
+        if (!historyData?.series) return [];
+
+        // 过滤出响应时间指标的 series
+        const responseTimeSeries = historyData.series.filter(s => s.name === 'response_time');
+
+        // 根据选择的探针过滤
+        const filteredSeries = selectedAgent === 'all'
+            ? responseTimeSeries
+            : responseTimeSeries.filter(s => s.labels?.agent_id === selectedAgent);
+
+        if (filteredSeries.length === 0) return [];
 
         // 按时间戳分组数据
-        const grouped = historyData.reduce((acc, item) => {
-            const time = new Date(item.timestamp).toLocaleTimeString('zh-CN', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
+        const grouped: Record<number, any> = {};
+
+        filteredSeries.forEach(series => {
+            const agentId = series.labels?.agent_id || 'unknown';
+            const agentKey = `agent_${agentId}`;
+
+            series.data.forEach(point => {
+                if (!grouped[point.timestamp]) {
+                    grouped[point.timestamp] = {
+                        time: new Date(point.timestamp).toLocaleTimeString('zh-CN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                        }),
+                        timestamp: point.timestamp,
+                    };
+                }
+                grouped[point.timestamp][agentKey] = point.value;
             });
+        });
 
-            if (!acc[time]) {
-                acc[time] = {time, timestamp: item.timestamp};
-            }
-
-            // 根据选择的探针过滤
-            if (selectedAgent === 'all' || item.agentId === selectedAgent) {
-                const agentKey = `agent_${item.agentId}`;
-                acc[time][agentKey] = item.avgResponse;
-            }
-
-            return acc;
-        }, {} as Record<string, any>);
-
-        return Object.values(grouped);
+        // 按时间戳排序
+        return Object.values(grouped).sort((a, b) => a.timestamp - b.timestamp);
     }, [historyData, selectedAgent]);
 
     if (isLoading) {
@@ -655,7 +668,7 @@ const MonitorDetail = () => {
                                 <AreaChart data={chartData}>
                                     <defs>
                                         {monitorStats.map((stat, index) => {
-                                            const agentKey = `agent_${stat.agentId}`;
+                                            const agentKey = `agent_${stat.agentID}`;
                                             const color = AGENT_COLORS[index % AGENT_COLORS.length];
                                             return (
                                                 <linearGradient key={agentKey} id={`gradient_${agentKey}`} x1="0" y1="0"
@@ -690,13 +703,13 @@ const MonitorDetail = () => {
                                         className="hidden sm:block"
                                     />
                                     {monitorStats
-                                        .filter(stat => selectedAgent === 'all' || stat.agentId === selectedAgent)
+                                        .filter(stat => selectedAgent === 'all' || stat.agentID === selectedAgent)
                                         .map((stat) => {
                                             // 使用原始索引保持颜色一致性
-                                            const originalIndex = monitorStats.findIndex(s => s.agentId === stat.agentId);
-                                            const agentKey = `agent_${stat.agentId}`;
+                                            const originalIndex = monitorStats.findIndex(s => s.agentID === stat.agentID);
+                                            const agentKey = `agent_${stat.agentID}`;
                                             const color = AGENT_COLORS[originalIndex % AGENT_COLORS.length];
-                                            const agentLabel = stat.agentName || stat.agentId.substring(0, 8);
+                                            const agentLabel = stat.agentID.substring(0, 8);
                                             return (
                                                 <Area
                                                     key={agentKey}
@@ -759,7 +772,7 @@ const MonitorDetail = () => {
                                         {monitorStats.map((stats, index) => {
                                             const color = AGENT_COLORS[index % AGENT_COLORS.length];
                                             return (
-                                                <tr key={stats.id}
+                                                <tr key={stats.agentID}
                                                     className="transition-colors">
                                                     <td className="whitespace-nowrap px-4 sm:px-6 py-3 sm:py-4">
                                                         <div className="flex items-center gap-2">
@@ -768,23 +781,10 @@ const MonitorDetail = () => {
                                                             style={{backgroundColor: color}}
                                                         />
                                                             <div className="flex flex-col min-w-0">
-                                                                {stats.agentName ? (
-                                                                    <>
-                                                                    <span
-                                                                        className="text-xs sm:text-sm font-medium text-slate-900 dark:text-white truncate">
-                                                                        {stats.agentName}
-                                                                    </span>
-                                                                        <span
-                                                                            className="font-mono text-[10px] sm:text-xs text-slate-500 dark:text-slate-400">
-                                                                        {stats.agentId.substring(0, 8)}...
-                                                                    </span>
-                                                                    </>
-                                                                ) : (
-                                                                    <span
-                                                                        className="font-mono text-xs sm:text-sm text-slate-700 dark:text-slate-300">
-                                                                    {stats.agentId.substring(0, 8)}...
+                                                                <span
+                                                                    className="font-mono text-xs sm:text-sm text-slate-700 dark:text-slate-300">
+                                                                    {stats.agentID.substring(0, 8)}...
                                                                 </span>
-                                                                )}
                                                             </div>
                                                         </div>
                                                     </td>

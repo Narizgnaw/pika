@@ -294,21 +294,19 @@ func setupApi(app *orz.App, components *AppComponents) {
 func autoMigrate(database *gorm.DB) error {
 	// 自动迁移数据库表
 	return database.AutoMigrate(
-		&models.Agent{},
-		&models.ApiKey{},
-		&models.HostMetric{}, // 保留主机静态信息表
-		&models.AuditResult{},
-		&models.Property{},
-		&models.AlertRecord{},
-		&models.AlertState{},
-		&models.MonitorTask{},
-		// MonitorStats 已废弃，统计数据从 VictoriaMetrics 查询
-		&models.TamperProtectConfig{},
-		&models.TamperEvent{},
-		&models.TamperAlert{},
-		&models.DDNSConfig{},
-		&models.DDNSRecord{},
-		// 指标数据已迁移到 VictoriaMetrics
+		&models.Agent{},               // 探针
+		&models.ApiKey{},              // ApiKey
+		&models.HostMetric{},          // 保留主机静态信息表
+		&models.AuditResult{},         // 审计历史
+		&models.Property{},            // 系统属性
+		&models.AlertRecord{},         // 告警记录
+		&models.AlertState{},          // 告警状态
+		&models.MonitorTask{},         // 服务监控
+		&models.TamperProtectConfig{}, // 防篡改配置
+		&models.TamperEvent{},         // 防篡改事件
+		&models.TamperAlert{},         // 防篡改告警
+		&models.DDNSConfig{},          // DDNS 配置
+		&models.DDNSRecord{},          // DDNS 记录
 	)
 }
 

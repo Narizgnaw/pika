@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/dushixiang/pika/internal/models"
@@ -666,9 +667,7 @@ func (s *MetricService) convertQueryResultToSeries(result *vmclient.QueryResult,
 				continue
 			}
 
-			var value float64
-			fmt.Sscanf(valueStr, "%f", &value)
-
+			value, _ := strconv.ParseFloat(valueStr, 64)
 			dataPoints = append(dataPoints, MetricDataPoint{
 				Timestamp: int64(timestamp * 1000), // 转换为毫秒
 				Value:     value,
@@ -678,8 +677,8 @@ func (s *MetricService) convertQueryResultToSeries(result *vmclient.QueryResult,
 		// 合并标签
 		labels := make(map[string]string)
 		for k, v := range timeSeries.Metric {
-			// 排除内部标签
-			if k != "__name__" && k != "agent_id" {
+			// 只排除 __name__ 内部标签，保留 agent_id（监控功能需要用它来区分探针）
+			if k != "__name__" {
 				labels[k] = v
 			}
 		}
@@ -734,20 +733,20 @@ type MonitorStatsResult struct {
 
 // AgentMonitorStat 单个探针的监控统计
 type AgentMonitorStat struct {
-	AgentID          string
-	CurrentResponse  int64
-	AvgResponse24h   int64
-	Uptime24h        float64
-	Uptime7d         float64
-	LastCheckStatus  string
-	LastCheckError   string
-	LastCheckTime    int64
-	CertExpiryDate   int64
-	CertExpiryDays   int
-	TotalChecks24h   int64
-	SuccessChecks24h int64
-	TotalChecks7d    int64
-	SuccessChecks7d  int64
+	AgentID          string  `json:"agentID,omitempty"`
+	CurrentResponse  int64   `json:"currentResponse,omitempty"`
+	AvgResponse24h   int64   `json:"avgResponse24H,omitempty"`
+	Uptime24h        float64 `json:"uptime24H,omitempty"`
+	Uptime7d         float64 `json:"uptime7D,omitempty"`
+	LastCheckStatus  string  `json:"lastCheckStatus,omitempty"`
+	LastCheckError   string  `json:"lastCheckError,omitempty"`
+	LastCheckTime    int64   `json:"lastCheckTime,omitempty"`
+	CertExpiryDate   int64   `json:"certExpiryDate,omitempty"`
+	CertExpiryDays   int     `json:"certExpiryDays,omitempty"`
+	TotalChecks24h   int64   `json:"totalChecks24H,omitempty"`
+	SuccessChecks24h int64   `json:"successChecks24H,omitempty"`
+	TotalChecks7d    int64   `json:"totalChecks7D,omitempty"`
+	SuccessChecks7d  int64   `json:"successChecks7D,omitempty"`
 }
 
 // buildMonitorPromQLQueries 构建监控查询的 PromQL 语句

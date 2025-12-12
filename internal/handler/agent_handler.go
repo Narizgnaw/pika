@@ -80,7 +80,7 @@ func (h *AgentHandler) HandleWebSocket(c echo.Context) error {
 	conn.SetReadDeadline(time.Time{})
 
 	// 解析注册消息
-	var msg protocol.Message
+	var msg protocol.InputMessage
 	if err := json.Unmarshal(message, &msg); err != nil {
 		h.logger.Error("failed to parse register message", zap.Error(err))
 		conn.Close()
@@ -154,11 +154,15 @@ func (h *AgentHandler) handleWebSocketMessage(ctx context.Context, agentID strin
 
 	case protocol.MessageTypeMetrics:
 		// 指标数据
-		var metricsWrapper protocol.MetricsWrapper
+		var metricsWrapper protocol.MetricsPayload
 		if err := json.Unmarshal(data, &metricsWrapper); err != nil {
 			return err
 		}
-		return h.metricService.HandleMetricData(ctx, agentID, string(metricsWrapper.Type), metricsWrapper.Data)
+		metricsData, err := json.Marshal(metricsWrapper.Data)
+		if err != nil {
+			return err
+		}
+		return h.metricService.HandleMetricData(ctx, agentID, string(metricsWrapper.Type), json.RawMessage(metricsData))
 
 	case protocol.MessageTypeCommandResp:
 		// 指令响应
@@ -230,21 +234,10 @@ func (h *AgentHandler) sendRegisterSuccess(conn *websocket.Conn, agentID string)
 		AgentID: agentID,
 		Status:  "success",
 	}
-	respData, err := json.Marshal(resp)
-	if err != nil {
-		return err
-	}
-
-	msg := protocol.Message{
+	return conn.WriteJSON(protocol.OutboundMessage{
 		Type: protocol.MessageTypeRegisterAck,
-		Data: respData,
-	}
-	msgData, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
-	return conn.WriteMessage(websocket.TextMessage, msgData)
+		Data: resp,
+	})
 }
 
 // sendRegisterError 发送注册失败响应
@@ -253,15 +246,11 @@ func (h *AgentHandler) sendRegisterError(conn *websocket.Conn, errMsg string) er
 		Status:  "error",
 		Message: errMsg,
 	}
-	respData, _ := json.Marshal(resp)
 
-	msg := protocol.Message{
+	return conn.WriteJSON(protocol.OutboundMessage{
 		Type: protocol.MessageTypeRegisterErr,
-		Data: respData,
-	}
-	msgData, _ := json.Marshal(msg)
-
-	return conn.WriteMessage(websocket.TextMessage, msgData)
+		Data: resp,
+	})
 }
 
 // sendTamperConfig 发送防篡改配置（探针初始化时发送完整配置作为新增）
@@ -286,17 +275,10 @@ func (h *AgentHandler) sendTamperConfig(conn *websocket.Conn, agentID string) er
 		Removed: []string{}, // 初始化时没有需要移除的
 	}
 
-	data, err := json.Marshal(configData)
-	if err != nil {
-		return err
-	}
-
-	msg := protocol.Message{
+	msgData, err := json.Marshal(protocol.OutboundMessage{
 		Type: protocol.MessageTypeTamperProtect,
-		Data: data,
-	}
-
-	msgData, err := json.Marshal(msg)
+		Data: configData,
+	})
 	if err != nil {
 		return err
 	}
@@ -595,17 +577,10 @@ func (h *AgentHandler) SendCommand(c echo.Context) error {
 		Type: cmdType,
 	}
 
-	reqData, err := json.Marshal(cmdReq)
-	if err != nil {
-		return err
-	}
-
-	msg := protocol.Message{
+	msgData, err := json.Marshal(protocol.OutboundMessage{
 		Type: protocol.MessageTypeCommand,
-		Data: reqData,
-	}
-
-	msgData, err := json.Marshal(msg)
+		Data: cmdReq,
+	})
 	if err != nil {
 		return err
 	}

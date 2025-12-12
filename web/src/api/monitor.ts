@@ -39,26 +39,51 @@ export const getMonitorStatsById = (id: string) => {
     return get<PublicMonitor>(`/monitors/${encodeURIComponent(id)}/stats`);
 };
 
-// 公开接口 - 获取指定监控各探针的统计数据（详细列表）
+// 公开接口 - 获取指定监控各探针的统计数据（直接从 VictoriaMetrics 查询）
 export const getMonitorAgentStats = (id: string) => {
-    return get<MonitorStats[]>(`/monitors/${encodeURIComponent(id)}/agents`);
+    return get<AgentMonitorStat[]>(`/monitors/${encodeURIComponent(id)}/agents`);
 };
 
-// 聚合的监控历史数据
-export interface AggregatedMonitorMetric {
-    timestamp: number;
-    agentId: string;
-    avgResponse: number;
-    maxResponse: number;
-    minResponse: number;
-    successCount: number;
-    totalCount: number;
-    successRate: number;
-    lastStatus: string;
-    lastErrorMsg: string;
+// VictoriaMetrics 时序数据点
+export interface MetricDataPoint {
+    timestamp: number;  // 毫秒时间戳
+    value: number;
 }
 
-// 公开接口 - 获取指定监控的历史数据
-export const getMonitorHistory = (id: string, range: string = '5m') => {
-    return get<AggregatedMonitorMetric[]>(`/monitors/${encodeURIComponent(id)}/history?range=${range}`);
+// VictoriaMetrics 时序数据系列
+export interface MetricSeries {
+    name: string;                        // 系列名称（如 "response_time"）
+    labels?: Record<string, string>;     // 标签（如 { agent_id: "xxx", monitor_id: "yyy" }）
+    data: MetricDataPoint[];            // 数据点数组
+}
+
+// VictoriaMetrics 查询响应（直接返回时序数据）
+export interface GetMetricsResponse {
+    agentId: string;   // 为空表示多探针
+    type: string;      // "monitor"
+    range: string;     // 时间范围描述
+    series: MetricSeries[];  // 时序数据系列（每个探针一个系列）
+}
+
+// 探针监控统计（直接从 VictoriaMetrics 查询）
+export interface AgentMonitorStat {
+    agentID: string;
+    currentResponse: number;
+    avgResponse24h: number;
+    uptime24h: number;
+    uptime7d: number;
+    lastCheckStatus: string;
+    lastCheckError: string;
+    lastCheckTime: number;
+    certExpiryDate: number;
+    certExpiryDays: number;
+    totalChecks24h: number;
+    successChecks24h: number;
+    totalChecks7d: number;
+    successChecks7d: number;
+}
+
+// 公开接口 - 获取指定监控的历史数据（VictoriaMetrics 原始时序数据）
+export const getMonitorHistory = (id: string, range: string = '15m') => {
+    return get<GetMetricsResponse>(`/monitors/${encodeURIComponent(id)}/history?range=${range}`);
 };
