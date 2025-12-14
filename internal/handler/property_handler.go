@@ -7,7 +7,6 @@ import (
 
 	"github.com/dushixiang/pika/internal/models"
 	"github.com/dushixiang/pika/internal/service"
-	"github.com/go-orz/orz"
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
 )
@@ -149,13 +148,6 @@ func (h *PropertyHandler) GetLogo(c echo.Context) error {
 	c.Response().Header().Set("Cache-Control", "public, max-age=600") // 缓存 10 分钟
 
 	return c.Blob(http.StatusOK, contentType, imageData)
-}
-
-// GetMetricsConfig 获取指标配置（公开访问）
-func (h *PropertyHandler) GetMetricsConfig(c echo.Context) error {
-	return c.JSON(http.StatusOK, orz.Map{
-		"options": models.TimeRangeOptions,
-	})
 }
 
 // TestNotificationChannel 测试通知渠道（从数据库读取配置）

@@ -62,24 +62,6 @@ type SystemConfig struct {
 	DefaultView  string `json:"defaultView"`  // 默认视图 grid | list
 }
 
-// TimeRangeOption 时间范围选项
-type TimeRangeOption struct {
-	Label string `json:"label"` // 显示标签，如 "15分钟"
-	Value string `json:"value"` // 值，如 "15m"
-}
-
-var TimeRangeOptions = []TimeRangeOption{
-	{Label: "15分钟", Value: "15m"},
-	{Label: "30分钟", Value: "30m"},
-	{Label: "1小时", Value: "1h"},
-	{Label: "3小时", Value: "3h"},
-	{Label: "6小时", Value: "6h"},
-	{Label: "12小时", Value: "12h"},
-	{Label: "1天", Value: "1d"},
-	{Label: "3天", Value: "3d"},
-	{Label: "7天", Value: "7d"},
-}
-
 // AlertConfig 全局告警配置
 type AlertConfig struct {
 	Enabled bool       `json:"enabled"` // 是否启用全局告警
