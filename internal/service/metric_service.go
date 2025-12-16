@@ -12,6 +12,7 @@ import (
 	"github.com/dushixiang/pika/internal/protocol"
 	"github.com/dushixiang/pika/internal/repo"
 	"github.com/dushixiang/pika/internal/vmclient"
+	"github.com/go-orz/toolkit/syncx"
 
 	"github.com/go-orz/cache"
 	"go.uber.org/zap"
@@ -302,12 +303,12 @@ func (s *MetricService) updateMonitorCache(agentID string, monitorData *protocol
 	if !ok {
 		latestMetrics = &metric.LatestMonitorMetrics{
 			MonitorID: monitorID,
-			Agents:    make(map[string]*protocol.MonitorData),
+			Agents:    syncx.NewSafeMap[string, *protocol.MonitorData](),
 		}
 	}
 
 	// 更新探针数据
-	latestMetrics.Agents[agentID] = monitorData
+	latestMetrics.Agents.Set(agentID, monitorData)
 	latestMetrics.UpdatedAt = timestamp
 
 	// 保存到缓存（5分钟过期）
@@ -610,8 +611,8 @@ func (s *MetricService) GetMonitorAgentStats(monitorID string) []protocol.Monito
 	}
 
 	// 收集所有 agentId
-	agentIds := make([]string, 0, len(latestMetrics.Agents))
-	for agentId := range latestMetrics.Agents {
+	agentIds := make([]string, 0, latestMetrics.Agents.Len())
+	for agentId := range latestMetrics.Agents.Keys() {
 		agentIds = append(agentIds, agentId)
 	}
 
@@ -629,10 +630,10 @@ func (s *MetricService) GetMonitorAgentStats(monitorID string) []protocol.Monito
 	}
 
 	// 转换为数组并填充 agent 名称
-	result := make([]protocol.MonitorData, 0, len(latestMetrics.Agents))
-	for agentId, stat := range latestMetrics.Agents {
-		stat.Target = ""                       // 隐藏目标地址
-		stat.AgentName = agentNameMap[agentId] // 填充 agent 名称
+	result := make([]protocol.MonitorData, 0, latestMetrics.Agents.Len())
+	for stat := range latestMetrics.Agents.Values() {
+		stat.Target = ""                            // 隐藏目标地址
+		stat.AgentName = agentNameMap[stat.AgentId] // 填充 agent 名称
 		result = append(result, *stat)
 	}
 
@@ -660,7 +661,7 @@ func (s *MetricService) aggregateMonitorStats(latestMetrics *metric.LatestMonito
 		Status: "unknown",
 	}
 
-	if len(latestMetrics.Agents) == 0 {
+	if latestMetrics.Agents.Len() == 0 {
 		return result
 	}
 
@@ -673,7 +674,7 @@ func (s *MetricService) aggregateMonitorStats(latestMetrics *metric.LatestMonito
 	var minCertExpiryTime int64
 	var minCertDaysLeft int
 
-	for _, stat := range latestMetrics.Agents {
+	for stat := range latestMetrics.Agents.Values() {
 		totalResponseTime += stat.ResponseTime
 
 		// 计算响应时间的最小值和最大值
@@ -707,7 +708,7 @@ func (s *MetricService) aggregateMonitorStats(latestMetrics *metric.LatestMonito
 		}
 	}
 
-	count := len(latestMetrics.Agents)
+	count := latestMetrics.Agents.Len()
 	result.AgentCount = count
 	if count > 0 {
 		result.ResponseTime = totalResponseTime / int64(count)

@@ -1,12 +1,15 @@
 package metric
 
-import "github.com/dushixiang/pika/internal/protocol"
+import (
+	"github.com/dushixiang/pika/internal/protocol"
+	"github.com/go-orz/toolkit/syncx"
+)
 
 // LatestMonitorMetrics 监控任务的最新指标（按 agent 分组）
 type LatestMonitorMetrics struct {
-	MonitorID string                           `json:"monitorId"`
-	Agents    map[string]*protocol.MonitorData `json:"agents"`    // key: agentID
-	UpdatedAt int64                            `json:"updatedAt"` // 最后更新时间
+	MonitorID string                                        `json:"monitorId"`
+	Agents    *syncx.SafeMap[string, *protocol.MonitorData] `json:"agents"`    // key: agentID
+	UpdatedAt int64                                         `json:"updatedAt"` // 最后更新时间
 }
 
 // MonitorStatsResult 监控统计结果（所有探针的聚合数据）
