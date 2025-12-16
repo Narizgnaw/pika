@@ -35,9 +35,6 @@ export const MonitorHero = ({monitor, onBack}: MonitorHeroProps) => {
                         <TypeIcon type={monitor.type}/>
                     </div>
                     <div className="flex-1 min-w-0">
-                        <div className="text-[10px] font-mono text-cyan-500/60 mb-1 tracking-wider">
-                            MONITOR_ID: {monitor.id.toString().substring(0, 8)}
-                        </div>
                         <div className="flex flex-wrap items-center gap-3 mb-2">
                             <h1 className="text-2xl sm:text-3xl font-bold truncate text-cyan-100 tracking-wide">{monitor.name}</h1>
                             <StatusBadge status={monitor.status}/>

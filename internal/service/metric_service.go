@@ -416,7 +416,7 @@ func (s *MetricService) buildPromQLQueries(agentID, metricType string, interface
 			{Name: "established", Query: fmt.Sprintf(`pika_network_conn_established{agent_id="%s"}`, agentID)},
 			{Name: "time_wait", Query: fmt.Sprintf(`pika_network_conn_time_wait{agent_id="%s"}`, agentID)},
 			{Name: "close_wait", Query: fmt.Sprintf(`pika_network_conn_close_wait{agent_id="%s"}`, agentID)},
-			{Name: "listen", Query: fmt.Sprintf(`pika_network_conn_total{agent_id="%s"}`, agentID)},
+			{Name: "listen", Query: fmt.Sprintf(`pika_network_conn_listen{agent_id="%s"}`, agentID)},
 		}
 
 	case "disk_io":

@@ -243,7 +243,7 @@ const SystemConfigComponent = () => {
                                             }}
                                         />
                                         <div>
-                                            <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-blue-600">
+                                            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-blue-600">
                                                 {systemNameEn}
                                             </p>
                                             <h1 className="text-sm font-bold text-slate-900">

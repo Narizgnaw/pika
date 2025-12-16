@@ -1,7 +1,5 @@
-import type {ReactNode} from 'react';
-import {Cpu, Database, HardDrive, MemoryStick, Network} from 'lucide-react';
-import {Card} from '@/components/common';
-import {InfoGrid, SnapshotSection, type SnapshotCardData} from '@/components/server';
+import {Cpu, HardDrive, MemoryStick, Network} from 'lucide-react';
+import {InfoGrid, type SnapshotCardData, SnapshotSection} from '@/components/server';
 import {formatBytes, formatDateTime, formatPercentValue, formatUptime} from '@/utils/util';
 import type {Agent, LatestMetrics} from '@/types';
 import CyberCard from "@/components/CyberCard.tsx";
@@ -102,7 +100,7 @@ export const SystemInfoSection = ({agent, latestMetrics}: SystemInfoSectionProps
             metrics: [
                 {
                     label: '已用 / 总量',
-                    value: `${formatBytes(latestMetrics.disk?.used)} / ${formatBytes(latestMetrics.disk?.total)}`
+                    value: `${formatBytes(latestMetrics.disk?.used, 1)} / ${formatBytes(latestMetrics.disk?.total, 1)}`
                 },
                 {label: '磁盘数量', value: latestMetrics.disk?.totalDisks ?? '-'},
             ],
@@ -112,14 +110,14 @@ export const SystemInfoSection = ({agent, latestMetrics}: SystemInfoSectionProps
         const networkMetrics = [
             {
                 label: '上行 / 下行',
-                value: `${formatBytes(latestMetrics.network?.totalBytesSentRate)}/s ↑ / ${formatBytes(
-                    latestMetrics.network?.totalBytesRecvRate,
+                value: `${formatBytes(latestMetrics.network?.totalBytesSentRate, 1)}/s ↑ / ${formatBytes(
+                    latestMetrics.network?.totalBytesRecvRate, 1,
                 )}/s ↓`,
             },
             {
                 label: '网络累计',
-                value: `${formatBytes(latestMetrics.network?.totalBytesSentTotal)} ↑ / ${formatBytes(
-                    latestMetrics.network?.totalBytesRecvTotal,
+                value: `${formatBytes(latestMetrics.network?.totalBytesSentTotal, 1)} ↑ / ${formatBytes(
+                    latestMetrics.network?.totalBytesRecvTotal, 1,
                 )} ↓`,
             },
         ];
@@ -131,7 +129,7 @@ export const SystemInfoSection = ({agent, latestMetrics}: SystemInfoSectionProps
 
             networkMetrics.push({
                 label: '流量限额',
-                value: `${formatBytes(agent.trafficUsed || 0)} / ${formatBytes(agent.trafficLimit)} (${formatPercentValue(trafficUsedPercent)}%)`,
+                value: `${formatBytes(agent.trafficUsed || 0, 1)} / ${formatBytes(agent.trafficLimit, 1)} (${formatPercentValue(trafficUsedPercent)}%)`,
             });
 
             if (agent.trafficResetDay && agent.trafficResetDay > 0) {
@@ -159,15 +157,15 @@ export const SystemInfoSection = ({agent, latestMetrics}: SystemInfoSectionProps
             <div className="space-y-6">
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                     <CyberCard className={'p-6'}>
-                        <h3 className="text-xs font-bold font-mono uppercase tracking-widest text-cyan-400">运行环境</h3>
-                        <p className="mt-1 text-[10px] text-cyan-700">来自最近一次探针上报的硬件与系统信息</p>
+                        <h3 className="text-sm font-bold font-mono uppercase tracking-widest text-cyan-400">运行环境</h3>
+                        <p className="mt-1 text-xs text-cyan-700">来自最近一次探针上报的硬件与系统信息</p>
                         <div className="mt-4">
                             <InfoGrid items={environmentInfo}/>
                         </div>
                     </CyberCard>
                     <CyberCard className={'p-6'}>
-                        <h3 className="text-xs font-bold font-mono uppercase tracking-widest text-cyan-400">运行状态</h3>
-                        <p className="mt-1 text-[10px] text-cyan-700">关键时间与网络指标，帮助快速判断主机健康状况</p>
+                        <h3 className="text-sm font-bold font-mono uppercase tracking-widest text-cyan-400">运行状态</h3>
+                        <p className="mt-1 text-xs text-cyan-700">关键时间与网络指标，帮助快速判断主机健康状况</p>
                         <div className="mt-4">
                             <InfoGrid items={statusInfo}/>
                         </div>

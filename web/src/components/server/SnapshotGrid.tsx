@@ -61,7 +61,7 @@ export const SnapshotGrid = ({cards}: SnapshotGridProps) => (
                     <div className="space-y-2">
                         {card.metrics.map((metric) => (
                             <div key={metric.label} className="flex items-center justify-between text-xs">
-                                <span className="text-cyan-600 font-mono text-[10px] uppercase tracking-wider">{metric.label}</span>
+                                <span className="text-cyan-600 font-mono text-xs uppercase tracking-wider">{metric.label}</span>
                                 <span
                                     className="ml-2 text-right font-medium text-cyan-200">{metric.value}</span>
                             </div>

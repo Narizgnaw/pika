@@ -1,13 +1,5 @@
 import type {FC} from 'react';
-import {
-    AlertTriangle,
-    ArrowDown,
-    ArrowUp,
-    Calendar,
-    Cpu,
-    HardDrive,
-    MemoryStick
-} from 'lucide-react';
+import {AlertTriangle, ArrowDown, ArrowUp, Calendar, Cpu, HardDrive, MemoryStick} from 'lucide-react';
 import type {Agent, LatestMetrics} from '@/types';
 import CompactResourceBar from '@/components/CompactResourceBar';
 import {formatBytes, formatSpeed} from '@/utils/util';
@@ -80,7 +72,7 @@ const ServerCard: FC<ServerCardProps> = ({server, onClick}) => {
                         <div className="font-bold text-cyan-100 font-mono text-base truncate">
                             {server.name || server.hostname}
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-cyan-600 mt-1 font-mono uppercase">
+                        <div className="flex items-center gap-2 text-xs text-cyan-600 mt-1 font-mono uppercase">
                             <span>{server.os}</span>
                             <span className="w-px h-2 bg-cyan-800"></span>
                             <span>{server.arch}</span>
@@ -91,14 +83,14 @@ const ServerCard: FC<ServerCardProps> = ({server, onClick}) => {
                             {server.tags.slice(0, 2).map(tag => (
                                 <span
                                     key={tag}
-                                    className="px-1.5 py-0.5 bg-cyan-900/40 text-cyan-400 border border-cyan-700/50 text-[10px] font-mono rounded-sm whitespace-nowrap"
+                                    className="px-1.5 py-0.5 bg-cyan-900/40 text-cyan-400 border border-cyan-700/50 text-xs font-mono rounded-sm whitespace-nowrap"
                                 >
                                 #{tag}
                             </span>
                             ))}
                             {server.tags.length > 2 && (
                                 <span
-                                    className="px-1.5 py-0.5 bg-cyan-900/40 text-cyan-400 border border-cyan-700/50 text-[10px] font-mono rounded-sm">
+                                    className="px-1.5 py-0.5 bg-cyan-900/40 text-cyan-400 border border-cyan-700/50 text-xs font-mono rounded-sm">
                                 +{server.tags.length - 2}
                             </span>
                             )}
@@ -120,14 +112,14 @@ const ServerCard: FC<ServerCardProps> = ({server, onClick}) => {
                             value={memoryUsage}
                             label="RAM"
                             icon={MemoryStick}
-                            subtext={`${formatBytes(memoryUsed)}/${formatBytes(memoryTotal)}`}
+                            subtext={`${formatBytes(memoryUsed, 0)}/${formatBytes(memoryTotal, 0)}`}
                             color="bg-purple-500"
                         />
                         <CompactResourceBar
                             value={diskUsage}
                             label="DSK"
                             icon={HardDrive}
-                            subtext={`${formatBytes(diskUsed)}/${formatBytes(diskTotal)}`}
+                            subtext={`${formatBytes(diskUsed, 0)}/${formatBytes(diskTotal, 0)}`}
                             color="bg-emerald-500"
                         />
                     </div>
@@ -140,7 +132,7 @@ const ServerCard: FC<ServerCardProps> = ({server, onClick}) => {
 
                 {/* 网络和流量 */}
                 <div className="flex items-center justify-between pt-2 border-t border-cyan-900/30">
-                    <div className="flex gap-3 text-[10px] font-mono">
+                    <div className="flex gap-3 text-xs font-mono">
                     <span className="flex items-center gap-1 text-emerald-400/80">
                         <ArrowDown className="w-3 h-3"/>
                         {formatSpeed(download)}
@@ -151,7 +143,7 @@ const ServerCard: FC<ServerCardProps> = ({server, onClick}) => {
                     </span>
                     </div>
                     {server.expireTime > 0 && (
-                        <div className="text-[10px] font-mono text-cyan-600 flex items-center gap-1">
+                        <div className="text-xs font-mono text-cyan-600 flex items-center gap-1">
                             <Calendar className="w-3 h-3"/>
                             {new Date(server.expireTime).toLocaleDateString('zh-CN')}
                         </div>
@@ -161,7 +153,7 @@ const ServerCard: FC<ServerCardProps> = ({server, onClick}) => {
                 {/* 流量限制 */}
                 {server.trafficLimit > 0 && (
                     <div className="pt-2 border-t border-cyan-900/30">
-                        <div className="flex justify-between text-[9px] text-cyan-700 mb-1">
+                        <div className="flex justify-between text-xs text-cyan-700 mb-1">
                             <span>流量使用</span>
                             <span>{Math.round((server.trafficUsed || 0) / server.trafficLimit * 100)}%</span>
                         </div>

@@ -22,21 +22,21 @@ const NetworkStatCard: FC<NetworkStatCardProps> = ({
             </div>
             <div className="relative z-10 flex justify-between items-start">
                 <div className="flex-1 min-w-0">
-                    <div className="text-[10px] font-mono uppercase tracking-widest opacity-70 mb-1">
+                    <div className="text-sm font-mono uppercase tracking-widest opacity-70 mb-1.5">
                         网络统计
                     </div>
-                    <div className="space-y-1 text-[10px] sm:text-xs font-mono">
+                    <div className="space-y-0.5 text-xs sm:text-xs font-mono">
                         <div className="flex items-center gap-1.5 sm:gap-2">
                             <ArrowUp className="w-3 h-3 text-blue-400 flex-shrink-0"/>
                             <span className="text-cyan-300 truncate">{formatSpeed(uploadRate)}</span>
-                            <span className="text-cyan-600 text-[9px] sm:text-[10px] hidden sm:inline">
+                            <span className="text-cyan-600 hidden sm:inline">
                                 ({formatBytes(uploadTotal)})
                             </span>
                         </div>
                         <div className="flex items-center gap-1.5 sm:gap-2">
                             <ArrowDown className="w-3 h-3 text-emerald-400 flex-shrink-0"/>
                             <span className="text-cyan-300 truncate">{formatSpeed(downloadRate)}</span>
-                            <span className="text-cyan-600 text-[9px] sm:text-[10px] hidden sm:inline">
+                            <span className="text-cyan-600 hidden sm:inline">
                                 ({formatBytes(downloadTotal)})
                             </span>
                         </div>

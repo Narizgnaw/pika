@@ -148,7 +148,7 @@ const MonitorCard = ({monitor, displayMode}: {
                         {displayLabel}
                         {monitor.agentCount > 0 && (
                             <span
-                                className="bg-slate-700 text-[10px] px-1.5 rounded-full text-cyan-300">
+                                className="bg-slate-700 text-xs px-1.5 rounded-full text-cyan-300">
                                     {monitor.agentCount} 节点
                                 </span>
                         )}

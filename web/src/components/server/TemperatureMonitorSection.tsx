@@ -26,7 +26,7 @@ export const TemperatureMonitorSection = ({latestMetrics}: TemperatureMonitorSec
                     >
                         <div className="flex items-center gap-2 mb-2">
                             <Thermometer className="h-4 w-4 text-cyan-600"/>
-                            <p className="text-[10px] font-bold font-mono uppercase tracking-wider text-cyan-400 truncate">{temp.type}</p>
+                            <p className="text-xs font-bold font-mono uppercase tracking-wider text-cyan-400 truncate">{temp.type}</p>
                         </div>
                         <p className="text-2xl font-bold text-orange-400">{temp.temperature.toFixed(1)}°C</p>
                     </div>

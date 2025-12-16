@@ -37,7 +37,7 @@ export const ServerHero = ({agent, latestMetrics, onBack}: ServerHeroProps) => {
     const heroStats = [
         {label: '运行系统', value: platformDisplay || '-'},
         {label: '硬件架构', value: architectureDisplay || '-'},
-        {label: '最近心跳', value: lastSeenDisplay},
+        {label: '系统进程', value: latestMetrics?.host?.procs || '-'},
         {label: '运行时长', value: uptimeDisplay},
     ];
 
@@ -77,7 +77,7 @@ export const ServerHero = ({agent, latestMetrics, onBack}: ServerHeroProps) => {
                         </div>
                     </div>
 
-                    <div className="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full lg:w-auto lg:min-w-[480px]">
                         {heroStats.map((stat) => (
                             <LittleStatCard key={stat.label} label={stat.label} value={stat.value}/>
                         ))}

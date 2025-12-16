@@ -79,7 +79,7 @@ const PublicHeader = () => {
                                     <h1 className="text-2xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 uppercase italic">
                                         {leftName}<span className="text-white">{rightName}</span>
                                     </h1>
-                                    <p className="text-[10px] text-cyan-500/60 font-mono tracking-[0.3em] uppercase">
+                                    <p className="text-xs text-cyan-500/60 font-mono tracking-[0.3em] uppercase">
                                         {window.SystemConfig?.SystemNameZh}
                                     </p>
                                 </div>
@@ -117,7 +117,7 @@ const PublicHeader = () => {
                         <div className="hidden lg:flex flex-col items-end">
                             <span className="text-xs font-mono text-cyan-400">{currentTime.toLocaleTimeString()}</span>
                             <span
-                                className="text-[10px] text-cyan-600 font-mono tracking-widest">{currentTime.toLocaleDateString()}</span>
+                                className="text-xs text-cyan-600 font-mono tracking-widest">{currentTime.toLocaleDateString()}</span>
                         </div>
                         <div className="h-8 w-[1px] bg-cyan-900/50 hidden lg:block"></div>
 

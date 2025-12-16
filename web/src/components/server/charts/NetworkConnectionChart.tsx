@@ -35,17 +35,23 @@ export const NetworkConnectionChart = ({agentId, timeRange}: NetworkConnectionCh
                 const time = formatChartTime(point.timestamp, timeRange);
 
                 if (!timeMap.has(point.timestamp)) {
-                    timeMap.set(point.timestamp, {time, timestamp: point.timestamp});
+                    timeMap.set(point.timestamp, {
+                        time, 
+                        timestamp: point.timestamp,
+                        established: 0,
+                        time_wait: 0,
+                        close_wait: 0,
+                        listen: 0
+                    });
                 }
 
                 const existing = timeMap.get(point.timestamp)!;
-                // 转换为驼峰命名以匹配图表的 dataKey
-                const camelCaseName = stateName.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-                existing[camelCaseName] = Number(point.value.toFixed(0));
+                // 直接使用下划线命名
+                existing[stateName] = Number(point.value.toFixed(0));
             });
         });
 
-        return Array.from(timeMap.values());
+        return Array.from(timeMap.values()).sort((a, b) => a.timestamp - b.timestamp);
     }, [metricsResponse, timeRange]);
 
     // 渲染
@@ -88,7 +94,7 @@ export const NetworkConnectionChart = ({agentId, timeRange}: NetworkConnectionCh
                         />
                         <Line
                             type="monotone"
-                            dataKey="timeWait"
+                            dataKey="time_wait"
                             name="TIME_WAIT"
                             stroke="#f59e0b"
                             strokeWidth={2}
@@ -97,7 +103,7 @@ export const NetworkConnectionChart = ({agentId, timeRange}: NetworkConnectionCh
                         />
                         <Line
                             type="monotone"
-                            dataKey="closeWait"
+                            dataKey="close_wait"
                             name="CLOSE_WAIT"
                             stroke="#ef4444"
                             strokeWidth={2}

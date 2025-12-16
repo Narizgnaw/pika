@@ -10,7 +10,6 @@ interface UseMetricsQueryOptions {
 
 /**
  * 查询 Agent 历史指标数据
- * 自动每 30 秒刷新一次
  * @param options 查询选项
  * @returns 历史指标查询结果
  */
@@ -25,6 +24,6 @@ export const useMetricsQuery = ({agentId, type, range, interfaceName}: UseMetric
                 interface: interfaceName,
             }),
         enabled: !!agentId,
-        refetchInterval: 30000, // 30秒自动刷新
+        // refetchInterval: 30000, // 30秒自动刷新
     });
 };

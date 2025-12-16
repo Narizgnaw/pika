@@ -29,7 +29,7 @@ const CompactResourceBar = ({ value, label, subtext, icon: Icon, color = "bg-cya
             {/* Icon & Label */}
             <div className={`flex items-center gap-2 w-10 flex-shrink-0 ${iconClass}`}>
                 <Icon className="w-3.5 h-3.5" strokeWidth={2} />
-                <span className="text-[10px] font-bold tracking-wider opacity-80">{label}</span>
+                <span className="text-xs font-bold tracking-wider opacity-80">{label}</span>
             </div>
 
             {/* Track Container */}
@@ -63,10 +63,10 @@ const CompactResourceBar = ({ value, label, subtext, icon: Icon, color = "bg-cya
             <div className={`w-10 font-medium text-xs ${isCritical ? 'text-rose-400' : 'text-slate-200'}`}>{value.toFixed(1)}%</div>
 
             {/* Value & Subtext */}
-            <div className="w-28 text-right flex items-baseline justify-end gap-2 flex-shrink-0">
+            <div className="w-32 text-right flex items-baseline justify-end gap-2 flex-shrink-0">
 
                 {subtext && (
-                    <span className="text-[9px] text-slate-500 opacity-60 group-hover/bar:opacity-100 transition-opacity">
+                    <span className="text-xs text-slate-400 opacity-60 group-hover/bar:opacity-100 transition-opacity">
              {subtext}
            </span>
                 )}

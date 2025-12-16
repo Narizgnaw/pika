@@ -5,7 +5,6 @@ import {
     AlertTriangle,
     ArrowDown,
     ArrowUp,
-    Calendar,
     Cpu,
     Filter,
     HardDrive,
@@ -189,7 +188,7 @@ const ServerList = () => {
             {allTags.length > 1 && (
                 <div className="flex flex-wrap gap-1.5 sm:gap-2 items-center">
                     <div
-                        className="text-[10px] sm:text-xs font-mono text-cyan-600 flex items-center gap-1.5 sm:gap-2 mr-1 sm:mr-2">
+                        className="text-sm sm:text-xs font-mono text-cyan-600 flex items-center gap-1.5 sm:gap-2 mr-1 sm:mr-2">
                         <Filter className="w-3 h-3"/>
                         <span className="hidden sm:inline">FILTERS:</span>
                     </div>
@@ -208,7 +207,7 @@ const ServerList = () => {
                                 key={tag}
                                 onClick={() => setSelectedTag(tagKey)}
                                 className={cn(
-                                    "px-3 py-1 rounded-full text-[10px] font-bold font-mono tracking-wider transition-all border cursor-pointer",
+                                    "px-3 py-1 rounded-full text-xs font-bold font-mono tracking-wider transition-all border cursor-pointer",
                                     selectedTag === tagKey
                                         ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-[0_0_10px_rgba(34,211,238,0.3)]'
                                         : 'bg-black/30 text-cyan-700 border-cyan-900/30 hover:text-cyan-400 hover:border-cyan-700'
@@ -234,7 +233,7 @@ const ServerList = () => {
                         className="hidden md:block bg-[#0a0b10]/90 border border-cyan-900/50 rounded-md overflow-hidden shadow-2xl backdrop-blur-sm">
                         <table className="w-full text-left border-collapse">
                             <thead>
-                            <tr className="bg-black/40 text-[10px] font-mono uppercase tracking-widest text-cyan-600 border-b border-cyan-900/50">
+                            <tr className="bg-black/40 text-sm font-mono uppercase tracking-widest text-cyan-600 border-b border-cyan-900/50">
                                 <th className="p-4 font-normal w-[300px]">System Identity</th>
                                 <th className="p-4 font-normal">Resource Telemetry</th>
                                 <th className="p-4 font-normal w-[200px]">Network I/O</th>
@@ -275,7 +274,7 @@ const ServerList = () => {
                                                         {server.name || server.hostname}
                                                     </div>
                                                     <div
-                                                        className="flex items-center gap-2 text-[10px] text-cyan-600 mt-1 font-mono uppercase">
+                                                        className="flex items-center gap-2 text-xs text-cyan-600 mt-1 font-mono uppercase">
                                                         <span>{server.os}</span>
                                                         <span className="w-px h-2 bg-cyan-800"></span>
                                                         <span>{server.arch}</span>
@@ -299,14 +298,14 @@ const ServerList = () => {
                                                         value={memoryUsage}
                                                         label="RAM"
                                                         icon={MemoryStick}
-                                                        subtext={`${formatBytes(memoryUsed)}/${formatBytes(memoryTotal)}`}
+                                                        subtext={`${formatBytes(memoryUsed, 1)}/${formatBytes(memoryTotal, 1)}`}
                                                         color="bg-purple-500"
                                                     />
                                                     <CompactResourceBar
                                                         value={diskUsage}
                                                         label="DSK"
                                                         icon={HardDrive}
-                                                        subtext={`${formatBytes(diskUsed)}/${formatBytes(diskTotal)}`}
+                                                        subtext={`${formatBytes(diskUsed, 1)}/${formatBytes(diskTotal, 1)}`}
                                                         color="bg-emerald-500"
                                                     />
                                                 </div>
@@ -320,22 +319,22 @@ const ServerList = () => {
                                         </td>
 
                                         {/* Network */}
-                                        <td className="p-4 font-mono align-top">
-                                            <div className="flex flex-col gap-1.5 text-[10px] text-cyan-500 mb-1.5">
+                                        <td className="p-4 font-mono text-xs align-top">
+                                            <div className="flex flex-col gap-1.5 text-cyan-500 mb-1.5">
                                                 <span className="flex items-center gap-2 text-emerald-400/80">
                                                     <ArrowDown className="w-3 h-3"/>
-                                                    <span>IN: {formatSpeed(download)}</span>
+                                                    <span>{formatSpeed(download)}</span>
                                                 </span>
                                                 <span className="flex items-center gap-2 text-blue-400/80">
                                                     <ArrowUp className="w-3 h-3"/>
-                                                    <span>OUT: {formatSpeed(upload)}</span>
+                                                    <span>{formatSpeed(upload)}</span>
                                                 </span>
                                             </div>
                                             {server.trafficLimit > 0 && (
-                                                <div className="w-32">
+                                                <div className="w-32 text-xs">
                                                     <div
-                                                        className="flex justify-between text-[9px] text-cyan-700 mb-0.5">
-                                                        <span>流量使用</span>
+                                                        className="flex justify-between text-cyan-700 mb-0.5">
+                                                        <span className={''}>流量使用</span>
                                                         <span>{Math.round((server.trafficUsed || 0) / server.trafficLimit * 100)}%</span>
                                                     </div>
                                                     <div className="h-1 bg-cyan-900/50 rounded-full overflow-hidden">
@@ -352,18 +351,17 @@ const ServerList = () => {
                                                 <div className="flex gap-1 flex-wrap">
                                                     {server.tags && server.tags.length > 0 && server.tags.map(tag => (
                                                         <span key={tag}
-                                                              className="px-1.5 py-0.5 bg-cyan-900/40 text-cyan-400 border border-cyan-700/50 text-[10px] font-mono rounded-sm">
+                                                              className="px-1.5 py-0.5 bg-cyan-900/40 text-cyan-400 border border-cyan-700/50 text-xs font-mono rounded-sm">
                                                             #{tag}
                                                         </span>
                                                     ))}
                                                 </div>
                                                 <div
-                                                    className={`text-[10px] font-mono flex items-center gap-1 ${server.expireTime && server.expireTime > 0 ? 'text-cyan-600' : 'text-emerald-500/60'}`}>
+                                                    className={`text-xs font-mono flex items-center gap-1 ${server.expireTime && server.expireTime > 0 ? 'text-cyan-600' : 'text-emerald-500/60'}`}>
 
                                                     {server.expireTime > 0 &&
                                                         <div className={'flex items-center gap-1'}>
-                                                            <Calendar className="w-3 h-3"/>
-                                                            <div>过期时间: {new Date(server.expireTime).toLocaleDateString('zh-CN')}</div>
+                                                            <div>Expired: {new Date(server.expireTime).toLocaleDateString('zh-CN')}</div>
                                                         </div>
                                                     }
                                                 </div>

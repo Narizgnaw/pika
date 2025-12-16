@@ -213,7 +213,7 @@ const AdminLayout = () => {
                                 />
                             </div>
                             <div>
-                                <p className="text-[11px] uppercase tracking-[0.3em] text-white/60">{window.SystemConfig?.SystemNameZh}</p>
+                                <p className="text-xs uppercase tracking-[0.3em] text-white/60">{window.SystemConfig?.SystemNameZh}</p>
                                 <p className="text-sm font-semibold">控制台</p>
                             </div>
                         </div>

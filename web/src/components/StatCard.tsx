@@ -21,7 +21,7 @@ const StatCard = ({title, value, icon: Icon, color}: {
             </div>
             <div className="relative z-10 flex justify-between items-start">
                 <div>
-                    <div className="text-[10px] font-mono uppercase tracking-widest opacity-70 mb-1">{title}</div>
+                    <div className="text-sm font-mono uppercase tracking-widest opacity-70 mb-1">{title}</div>
                     <div className="text-3xl font-black tracking-tight">{value}</div>
                 </div>
                 <div className="p-2 rounded-lg bg-black/20 backdrop-blur-sm border border-white/5">

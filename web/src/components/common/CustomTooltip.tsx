@@ -41,7 +41,7 @@ export const CustomTooltip = ({active, payload, label, variant = 'light', unit =
             <p className={cn(
                 "font-semibold",
                 isDark
-                    ? "font-mono text-cyan-300 text-[10px] tracking-wider uppercase"
+                    ? "font-mono text-cyan-300 text-xs tracking-wider uppercase"
                     : "text-slate-700 dark:text-white mb-2"
             )}>
                 {displayLabel}

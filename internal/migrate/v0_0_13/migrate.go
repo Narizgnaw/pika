@@ -731,6 +731,7 @@ func convertToMetrics(agentID string, metricType string, data interface{}, times
 		metrics = append(metrics, createMetric("pika_network_conn_syn_recv", agentID, nil, float64(connData.SynRecv), timestamp))
 		metrics = append(metrics, createMetric("pika_network_conn_time_wait", agentID, nil, float64(connData.TimeWait), timestamp))
 		metrics = append(metrics, createMetric("pika_network_conn_close_wait", agentID, nil, float64(connData.CloseWait), timestamp))
+		metrics = append(metrics, createMetric("pika_network_conn_listen", agentID, nil, float64(connData.Listen), timestamp))
 		metrics = append(metrics, createMetric("pika_network_conn_total", agentID, nil, float64(connData.Total), timestamp))
 
 	case protocol.MetricTypeDiskIO:
