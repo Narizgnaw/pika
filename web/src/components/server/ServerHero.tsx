@@ -1,9 +1,9 @@
 import {ArrowLeft} from 'lucide-react';
-import {cn} from '@/lib/utils';
 import {formatBytes, formatDateTime, formatUptime} from '@/utils/util';
 import type {Agent, LatestMetrics} from '@/types';
 import LittleStatCard from '@/components/common/LittleStatCard';
 import CyberCard from "@/components/CyberCard.tsx";
+import {StatusBadge} from "@/components/common/StatusBadge.tsx";
 
 interface ServerHeroProps {
     agent: Agent;
@@ -49,7 +49,7 @@ export const ServerHero = ({agent, latestMetrics, onBack}: ServerHeroProps) => {
                         <button
                             type="button"
                             onClick={onBack}
-                            className="group inline-flex items-center gap-2 text-xs font-bold font-mono uppercase tracking-[0.3em] text-cyan-600 transition hover:text-cyan-400"
+                            className="group inline-flex items-center gap-2 text-xs font-bold font-mono uppercase tracking-[0.3em] text-cyan-400 transition hover:text-cyan-400"
                         >
                             <ArrowLeft className="h-4 w-4 transition group-hover:-translate-x-0.5"/>
                             返回概览
@@ -58,19 +58,9 @@ export const ServerHero = ({agent, latestMetrics, onBack}: ServerHeroProps) => {
                             <div>
                                 <div className="flex flex-wrap items-center gap-3">
                                     <h1 className="text-3xl font-bold text-cyan-100">{displayName}</h1>
-                                    <span
-                                        className={cn(
-                                            "inline-flex items-center gap-1 rounded-full px-3 py-0.5 text-xs font-bold font-mono uppercase tracking-wider",
-                                            isOnline
-                                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
-                                                : 'bg-rose-500/20 text-rose-400 border border-rose-500/50'
-                                        )}
-                                    >
-                                        <span className={cn("h-1.5 w-1.5 rounded-full", statusDotStyles)}/>
-                                        {statusText}
-                                    </span>
+                                    <StatusBadge status={agent.status === 1 ? 'up' : 'down'}/>
                                 </div>
-                                <p className="mt-2 text-sm text-cyan-600 font-mono">
+                                <p className="mt-2 text-sm text-cyan-400 font-mono">
                                     {[agent.hostname, agent.ip].filter(Boolean).join(' · ') || '-'}
                                 </p>
                             </div>
@@ -84,7 +74,7 @@ export const ServerHero = ({agent, latestMetrics, onBack}: ServerHeroProps) => {
                     </div>
                 </div>
                 <div
-                    className="flex flex-wrap items-center gap-3 text-xs text-cyan-600 font-mono pt-4 border-t border-cyan-900/30">
+                    className="flex flex-wrap items-center gap-3 text-xs text-cyan-400 font-mono pt-4 border-t border-cyan-900/30">
                     <span>探针 ID：{agent.id}</span>
                     <span className="hidden h-1 w-1 rounded-full bg-cyan-900 sm:inline-block"/>
                     <span>版本：{agent.version || '-'}</span>

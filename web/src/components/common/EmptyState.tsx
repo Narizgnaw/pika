@@ -28,7 +28,7 @@ export const EmptyState = ({variant = 'light', message, showBackButton = false}:
                 </div>
                 <p className={cn(
                     "text-sm font-mono",
-                    isDark ? "text-cyan-600" : "text-slate-600 dark:text-slate-400"
+                    isDark ? "text-cyan-400" : "text-slate-600 dark:text-slate-400"
                 )}>
                     {message || defaultMessage}
                 </p>

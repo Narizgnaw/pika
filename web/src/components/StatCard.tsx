@@ -6,10 +6,10 @@ const StatCard = ({title, value, icon: Icon, color}: {
     color: string;
 }) => {
     const colorMap: any = {
-        gray: 'text-slate-400 border-slate-500/30 bg-slate-500/5',
-        emerald: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/5',
+        gray: 'text-slate-400 border-slate-500/40 bg-slate-500/5',
+        emerald: 'text-emerald-500 border-emerald-500/30 bg-emerald-500/5',
         rose: 'text-rose-400 border-rose-500/30 bg-rose-500/5',
-        blue: 'text-blue-400 border-blue-500/30 bg-blue-500/5'
+        blue: 'text-blue-400 border-blue-500/40 bg-blue-500/5'
     };
     const style = colorMap[color] || colorMap.gray;
 

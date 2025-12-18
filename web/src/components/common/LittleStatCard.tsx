@@ -11,7 +11,7 @@ const LittleStatCard = ({
         key={label}
         className="rounded-xl bg-black/40 border border-cyan-900/50 p-4 text-left hover:border-cyan-700/50 transition"
     >
-        <p className="text-sm uppercase tracking-[0.3em] text-cyan-600 font-mono font-bold">{label}</p>
+        <p className="text-sm uppercase tracking-[0.3em] text-cyan-400 font-mono font-bold">{label}</p>
         <p className="mt-2 text-base font-semibold text-cyan-100">{value}</p>
     </div>
 );

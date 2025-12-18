@@ -40,7 +40,7 @@ export const Card = ({
                         {description && (
                             <p className={cn(
                                 "mt-1 text-xs",
-                                isDark ? "text-cyan-600" : "text-sm text-slate-500 dark:text-slate-400"
+                                isDark ? "text-cyan-400" : "text-sm text-slate-500 dark:text-slate-400"
                             )}>
                                 {description}
                             </p>

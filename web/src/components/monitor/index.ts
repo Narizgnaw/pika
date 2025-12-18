@@ -1,6 +1,6 @@
 export {CertBadge} from './CertBadge';
 export {MiniChart} from './MiniChart';
-export {StatusBadge} from './StatusBadge';
+export {StatusBadge} from '../common/StatusBadge.tsx';
 export {TypeIcon} from './TypeIcon';
 export {MonitorHero} from './MonitorHero';
 export {ResponseTimeChart} from './ResponseTimeChart';

@@ -114,7 +114,7 @@ export const TemperatureChart = ({agentId, timeRange}: TemperatureChartProps) =>
                         stroke="currentColor"
                         angle={-15}
                         textAnchor="end"
-                        className="text-xs text-cyan-600 font-mono"
+                        className="text-xs text-cyan-400 font-mono"
                         height={45}
                     />
                     <YAxis

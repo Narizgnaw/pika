@@ -158,14 +158,14 @@ export const SystemInfoSection = ({agent, latestMetrics}: SystemInfoSectionProps
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                     <CyberCard className={'p-6'}>
                         <h3 className="text-sm font-bold font-mono uppercase tracking-widest text-cyan-400">运行环境</h3>
-                        <p className="mt-1 text-xs text-cyan-700">来自最近一次探针上报的硬件与系统信息</p>
+                        <p className="mt-1 text-xs text-cyan-400">来自最近一次探针上报的硬件与系统信息</p>
                         <div className="mt-4">
                             <InfoGrid items={environmentInfo}/>
                         </div>
                     </CyberCard>
                     <CyberCard className={'p-6'}>
                         <h3 className="text-sm font-bold font-mono uppercase tracking-widest text-cyan-400">运行状态</h3>
-                        <p className="mt-1 text-xs text-cyan-700">关键时间与网络指标，帮助快速判断主机健康状况</p>
+                        <p className="mt-1 text-xs text-cyan-400">关键时间与网络指标，帮助快速判断主机健康状况</p>
                         <div className="mt-4">
                             <InfoGrid items={statusInfo}/>
                         </div>

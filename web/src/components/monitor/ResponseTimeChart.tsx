@@ -112,7 +112,7 @@ export const ResponseTimeChart = ({monitorId, monitorStats}: ResponseTimeChartPr
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                 <div>
                     <h3 className="text-lg font-bold tracking-wide text-cyan-100 uppercase">响应时间趋势</h3>
-                    <p className="text-xs text-cyan-600 mt-1 font-mono">监控各探针的响应时间变化</p>
+                    <p className="text-xs text-cyan-400 mt-1 font-mono">监控各探针的响应时间变化</p>
                 </div>
                 <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3">
                     <TimeRangeSelector
@@ -167,7 +167,7 @@ export const ResponseTimeChart = ({monitorId, monitorStats}: ResponseTimeChartPr
                                 scale="time"
                                 domain={['dataMin', 'dataMax']}
                                 tickFormatter={(value) => formatChartTime(Number(value), timeRange)}
-                                className="text-xs text-cyan-600 font-mono"
+                                className="text-xs text-cyan-400 font-mono"
                                 stroke="#164e63"
                                 tickLine={false}
                                 axisLine={false}
@@ -175,7 +175,7 @@ export const ResponseTimeChart = ({monitorId, monitorStats}: ResponseTimeChartPr
                                 textAnchor="end"
                             />
                             <YAxis
-                                className="text-xs text-cyan-600 font-mono"
+                                className="text-xs text-cyan-400 font-mono"
                                 stroke="#164e63"
                                 tickLine={false}
                                 axisLine={false}
