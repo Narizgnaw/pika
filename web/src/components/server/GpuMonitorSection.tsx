@@ -28,12 +28,12 @@ export const GpuMonitorSection = ({latestMetrics}: GpuMonitorSectionProps) => {
                         <div className="mb-3 flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <span
-                                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400">
+                                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-500">
                                     <Zap className="h-4 w-4"/>
                                 </span>
                                 <div>
                                     <p className="text-sm font-bold font-mono text-cyan-100">GPU {gpu.index}</p>
-                                    <p className="text-xs text-cyan-400">{gpu.name}</p>
+                                    <p className="text-xs text-cyan-500">{gpu.name}</p>
                                 </div>
                             </div>
                             <span className="text-2xl font-bold text-purple-400">
@@ -42,21 +42,21 @@ export const GpuMonitorSection = ({latestMetrics}: GpuMonitorSectionProps) => {
                         </div>
                         <div className="space-y-2 text-xs">
                             <div className="flex items-center justify-between">
-                                <span className="text-cyan-400 font-mono text-xs uppercase tracking-wider">温度</span>
+                                <span className="text-cyan-500 font-mono text-xs uppercase tracking-wider">温度</span>
                                 <span className="font-medium text-cyan-200">{gpu.temperature?.toFixed(1)}°C</span>
                             </div>
                             <div className="flex items-center justify-between">
-                                <span className="text-cyan-400 font-mono text-xs uppercase tracking-wider">显存</span>
+                                <span className="text-cyan-500 font-mono text-xs uppercase tracking-wider">显存</span>
                                 <span className="font-medium text-cyan-200">
                                     {formatBytes(gpu.memoryUsed)} / {formatBytes(gpu.memoryTotal)}
                                 </span>
                             </div>
                             <div className="flex items-center justify-between">
-                                <span className="text-cyan-400 font-mono text-xs uppercase tracking-wider">功耗</span>
+                                <span className="text-cyan-500 font-mono text-xs uppercase tracking-wider">功耗</span>
                                 <span className="font-medium text-cyan-200">{gpu.powerDraw?.toFixed(1)}W</span>
                             </div>
                             <div className="flex items-center justify-between">
-                                <span className="text-cyan-400 font-mono text-xs uppercase tracking-wider">风扇转速</span>
+                                <span className="text-cyan-500 font-mono text-xs uppercase tracking-wider">风扇转速</span>
                                 <span className="font-medium text-cyan-200">{gpu.fanSpeed?.toFixed(0)}%</span>
                             </div>
                         </div>

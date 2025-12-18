@@ -14,7 +14,7 @@ export const TypeIcon = ({ type }: TypeIconProps) => {
             return <Server className="w-4 h-4 text-orange-500 dark:text-orange-400" />;
         case 'icmp':
         case 'ping':
-            return <Wifi className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />;
+            return <Wifi className="w-4 h-4 text-cyan-500 dark:text-cyan-500" />;
         default:
             return <Server className="w-4 h-4 text-slate-500 dark:text-slate-400" />;
     }

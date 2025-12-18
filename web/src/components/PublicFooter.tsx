@@ -8,7 +8,7 @@ const PublicFooter = () => {
         <footer className="border-t border-cyan-900/50 bg-[#05050a]">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="py-6">
-                    <div className="flex flex-col items-center justify-between gap-4 text-xs text-cyan-400 sm:flex-row font-mono">
+                    <div className="flex flex-col items-center justify-between gap-4 text-xs text-cyan-500 sm:flex-row font-mono">
                         <div className="flex flex-wrap items-center justify-center gap-2">
                             <span className="text-cyan-500">© {currentYear}</span>
                             <span className="text-cyan-900">|</span>
@@ -17,14 +17,14 @@ const PublicFooter = () => {
                                 href="https://github.com/dushixiang/pika"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center gap-1.5 text-cyan-400 hover:text-cyan-300 transition-colors group"
+                                className="flex items-center gap-1.5 text-cyan-500 hover:text-cyan-300 transition-colors group"
                                 title="查看 GitHub 仓库"
                             >
                                 <Github className="h-3 w-3 group-hover:scale-110 transition-transform"/>
                                 <span className="underline decoration-cyan-700 underline-offset-2">Pika Monitor</span>
                             </a>
                             <span className="text-cyan-900">|</span>
-                            <span className="text-cyan-400/80 tracking-wider">保持洞察 · 稳定运行</span>
+                            <span className="text-cyan-500/80 tracking-wider">保持洞察 · 稳定运行</span>
                             {/* ICP 备案号 */}
                             {icpCode && (
                                 <>
@@ -33,7 +33,7 @@ const PublicFooter = () => {
                                         href="https://beian.miit.gov.cn"
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="text-cyan-400/80 hover:text-cyan-400 transition-colors"
+                                        className="text-cyan-500/80 hover:text-cyan-500 transition-colors"
                                     >
                                         {icpCode}
                                     </a>

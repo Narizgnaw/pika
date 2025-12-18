@@ -63,7 +63,7 @@ export const CpuChart = ({agentId, timeRange}: CpuChartProps) => {
                             stroke="currentColor"
                             angle={-15}
                             textAnchor="end"
-                            className="text-xs text-cyan-400 font-mono"
+                            className="text-xs text-cyan-500 font-mono"
                         />
                         <YAxis
                             domain={[0, 100]}

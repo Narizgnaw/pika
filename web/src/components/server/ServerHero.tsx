@@ -49,7 +49,7 @@ export const ServerHero = ({agent, latestMetrics, onBack}: ServerHeroProps) => {
                         <button
                             type="button"
                             onClick={onBack}
-                            className="group inline-flex items-center gap-2 text-xs font-bold font-mono uppercase tracking-[0.3em] text-cyan-400 transition hover:text-cyan-400"
+                            className="group inline-flex items-center gap-2 text-xs font-bold font-mono uppercase tracking-[0.3em] text-cyan-500 transition hover:text-cyan-500"
                         >
                             <ArrowLeft className="h-4 w-4 transition group-hover:-translate-x-0.5"/>
                             返回概览
@@ -60,7 +60,7 @@ export const ServerHero = ({agent, latestMetrics, onBack}: ServerHeroProps) => {
                                     <h1 className="text-3xl font-bold text-cyan-100">{displayName}</h1>
                                     <StatusBadge status={agent.status === 1 ? 'up' : 'down'}/>
                                 </div>
-                                <p className="mt-2 text-sm text-cyan-400 font-mono">
+                                <p className="mt-2 text-sm text-cyan-500 font-mono">
                                     {[agent.hostname, agent.ip].filter(Boolean).join(' · ') || '-'}
                                 </p>
                             </div>
@@ -74,7 +74,7 @@ export const ServerHero = ({agent, latestMetrics, onBack}: ServerHeroProps) => {
                     </div>
                 </div>
                 <div
-                    className="flex flex-wrap items-center gap-3 text-xs text-cyan-400 font-mono pt-4 border-t border-cyan-900/30">
+                    className="flex flex-wrap items-center gap-3 text-xs text-cyan-500 font-mono pt-4 border-t border-cyan-900/30">
                     <span>探针 ID：{agent.id}</span>
                     <span className="hidden h-1 w-1 rounded-full bg-cyan-900 sm:inline-block"/>
                     <span>版本：{agent.version || '-'}</span>

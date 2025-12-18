@@ -29,14 +29,14 @@ const NetworkStatCard: FC<NetworkStatCardProps> = ({
                         <div className="flex items-center gap-1.5 sm:gap-2">
                             <ArrowUp className="w-3 h-3 text-blue-400 flex-shrink-0"/>
                             <span className="text-cyan-300 truncate">{formatSpeed(uploadRate)}</span>
-                            <span className="text-cyan-400 hidden sm:inline">
+                            <span className="text-cyan-500 hidden sm:inline">
                                 ({formatBytes(uploadTotal)})
                             </span>
                         </div>
                         <div className="flex items-center gap-1.5 sm:gap-2">
                             <ArrowDown className="w-3 h-3 text-emerald-400 flex-shrink-0"/>
                             <span className="text-cyan-300 truncate">{formatSpeed(downloadRate)}</span>
-                            <span className="text-cyan-400 hidden sm:inline">
+                            <span className="text-cyan-500 hidden sm:inline">
                                 ({formatBytes(downloadTotal)})
                             </span>
                         </div>

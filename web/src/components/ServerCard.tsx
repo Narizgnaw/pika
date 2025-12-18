@@ -82,7 +82,7 @@ const ServerCard: FC<ServerCardProps> = ({server, onClick}) => {
                         <div className="font-bold text-cyan-100 font-mono text-base truncate">
                             {server.name || server.hostname}
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-cyan-400 mt-1 font-mono uppercase">
+                        <div className="flex items-center gap-2 text-xs text-cyan-500 mt-1 font-mono uppercase">
                             <span>{server.os}</span>
                             <span className="w-px h-2 bg-cyan-800"></span>
                             <span>{server.arch}</span>
@@ -93,14 +93,14 @@ const ServerCard: FC<ServerCardProps> = ({server, onClick}) => {
                             {server.tags.slice(0, 2).map(tag => (
                                 <span
                                     key={tag}
-                                    className="px-1.5 py-0.5 bg-cyan-900/40 text-cyan-400 border border-cyan-700/50 text-xs font-mono rounded-sm whitespace-nowrap"
+                                    className="px-1.5 py-0.5 bg-cyan-900/40 text-cyan-500 border border-cyan-700/50 text-xs font-mono rounded-sm whitespace-nowrap"
                                 >
                                 #{tag}
                             </span>
                             ))}
                             {server.tags.length > 2 && (
                                 <span
-                                    className="px-1.5 py-0.5 bg-cyan-900/40 text-cyan-400 border border-cyan-700/50 text-xs font-mono rounded-sm">
+                                    className="px-1.5 py-0.5 bg-cyan-900/40 text-cyan-500 border border-cyan-700/50 text-xs font-mono rounded-sm">
                                 +{server.tags.length - 2}
                             </span>
                             )}
@@ -110,12 +110,12 @@ const ServerCard: FC<ServerCardProps> = ({server, onClick}) => {
 
                 {isOnline && server.metrics?.host && (
                     <div className="flex items-center gap-2 text-xs font-mono mt-1.5">
-                        <div className="flex items-center gap-1 text-cyan-400">
+                        <div className="flex items-center gap-1 text-cyan-500">
                             <Clock className="w-3 h-3"/>
                             <span>{formatUptime(server.metrics.host.uptime)}</span>
                         </div>
                         <span className="w-px h-2 bg-cyan-800"></span>
-                        <div className="flex items-center gap-1 text-cyan-400">
+                        <div className="flex items-center gap-1 text-cyan-500">
                             <Activity className="w-3 h-3"/>
                             <span>{server.metrics.host.procs} 进程</span>
                         </div>
@@ -152,7 +152,7 @@ const ServerCard: FC<ServerCardProps> = ({server, onClick}) => {
                                 {temperatures.map((temp, index) => (
                                     <span key={index} className="flex items-center gap-1">
                                         <span className="text-orange-400">{temp.temperature?.toFixed(1)}°C</span>
-                                        <span className="text-cyan-400">{temp.type}</span>
+                                        <span className="text-cyan-500">{temp.type}</span>
                                         {index < temperatures.length - 1 && <span className="text-cyan-900">|</span>}
                                     </span>
                                 ))}
@@ -180,7 +180,7 @@ const ServerCard: FC<ServerCardProps> = ({server, onClick}) => {
                             </span>
                         </div>
                         {server.expireTime > 0 && (
-                            <div className="text-xs font-mono text-cyan-400 flex items-center gap-1">
+                            <div className="text-xs font-mono text-cyan-500 flex items-center gap-1">
                                 <Calendar className="w-3 h-3"/>
                                 {new Date(server.expireTime).toLocaleDateString('zh-CN')}
                             </div>
@@ -191,17 +191,17 @@ const ServerCard: FC<ServerCardProps> = ({server, onClick}) => {
                             <span className="flex items-center gap-1">
                                 <Network className="w-3 h-3 text-emerald-400"/>
                                 <span className="text-emerald-400">{netConn.established || 0}</span>
-                                <span className="text-cyan-400">已建立</span>
+                                <span className="text-cyan-500">已建立</span>
                             </span>
                             <span className="flex items-center gap-1">
                                 <Network className="w-3 h-3 text-blue-400"/>
                                 <span className="text-blue-400">{netConn.listen || 0}</span>
-                                <span className="text-cyan-400">监听</span>
+                                <span className="text-cyan-500">监听</span>
                             </span>
                             <span className="flex items-center gap-1">
                                 <Network className="w-3 h-3 text-amber-400"/>
                                 <span className="text-amber-400">{netConn.closeWait || 0}</span>
-                                <span className="text-cyan-400">等待关闭</span>
+                                <span className="text-cyan-500">等待关闭</span>
                             </span>
                         </div>
                     )}
@@ -210,7 +210,7 @@ const ServerCard: FC<ServerCardProps> = ({server, onClick}) => {
                 {/* 流量限制 */}
                 {server.trafficLimit > 0 && (
                     <div className="pt-2 border-t border-cyan-900/30">
-                        <div className="flex justify-between text-xs text-cyan-400 mb-1">
+                        <div className="flex justify-between text-xs text-cyan-500 mb-1">
                             <span>流量使用</span>
                             <span>{Math.round((server.trafficUsed || 0) / server.trafficLimit * 100)}%</span>
                         </div>

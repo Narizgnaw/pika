@@ -75,7 +75,7 @@ export const NetworkConnectionChart = ({agentId, timeRange}: NetworkConnectionCh
                             stroke="currentColor"
                             angle={-15}
                             textAnchor="end"
-                            className="text-xs text-cyan-400 font-mono"
+                            className="text-xs text-cyan-500 font-mono"
                             height={45}
                         />
                         <YAxis

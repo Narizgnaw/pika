@@ -11,8 +11,8 @@ import MonitorCard from "@/components/monitor/MonitorCard.tsx";
 
 const LoadingSpinner = () => (
     <div className="flex min-h-[400px] w-full items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-cyan-400">
-            <Loader2 className="h-8 w-8 animate-spin text-cyan-400"/>
+        <div className="flex flex-col items-center gap-3 text-cyan-500">
+            <Loader2 className="h-8 w-8 animate-spin text-cyan-500"/>
             <span className="text-sm font-mono">加载监控数据中...</span>
         </div>
     </div>
@@ -22,7 +22,7 @@ const EmptyState = () => (
     <div className="flex min-h-[400px] flex-col items-center justify-center text-cyan-500">
         <Shield className="mb-4 h-16 w-16 opacity-20"/>
         <p className="text-lg font-medium font-mono">暂无监控数据</p>
-        <p className="mt-2 text-sm text-cyan-400">请先在管理后台添加监控任务</p>
+        <p className="mt-2 text-sm text-cyan-500">请先在管理后台添加监控任务</p>
     </div>
 );
 
@@ -142,7 +142,7 @@ const MonitorList = () => {
                                         "px-4 py-1.5 rounded-md text-xs font-medium transition-all font-mono cursor-pointer",
                                         filter === f
                                             ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                                            : 'text-cyan-400 hover:text-cyan-400'
+                                            : 'text-cyan-500 hover:text-cyan-500'
                                     )}
                                 >
                                     {labels[f]}
@@ -153,14 +153,14 @@ const MonitorList = () => {
 
                     {/* 显示模式切换 */}
                     <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-cyan-900/50 items-center">
-                        <span className="text-xs text-cyan-400 px-2 font-mono">卡片指标:</span>
+                        <span className="text-xs text-cyan-500 px-2 font-mono">卡片指标:</span>
                         <button
                             onClick={() => setDisplayMode('avg')}
                             className={cn(
                                 "px-3 py-1.5 text-xs font-medium rounded transition-all flex items-center gap-1 font-mono cursor-pointer",
                                 displayMode === 'avg'
                                     ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                                    : 'text-cyan-400 hover:text-cyan-400'
+                                    : 'text-cyan-500 hover:text-cyan-500'
                             )}
                         >
                             <BarChart3 className="w-3 h-3"/> 平均
@@ -171,7 +171,7 @@ const MonitorList = () => {
                                 "px-3 py-1.5 text-xs font-medium rounded transition-all flex items-center gap-1 font-mono cursor-pointer",
                                 displayMode === 'max'
                                     ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                                    : 'text-cyan-400 hover:text-cyan-400'
+                                    : 'text-cyan-500 hover:text-cyan-500'
                             )}
                         >
                             <Maximize2 className="w-3 h-3"/> 最差(Max)
@@ -184,13 +184,13 @@ const MonitorList = () => {
                     <div
                         className="absolute -inset-0.5 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
                     <div className="relative flex items-center bg-[#0a0b10] rounded-lg border border-cyan-900">
-                        <Search className="w-4 h-4 ml-3 text-cyan-400"/>
+                        <Search className="w-4 h-4 ml-3 text-cyan-500"/>
                         <input
                             type="text"
                             placeholder="搜索服务名称或地址..."
                             value={searchKeyword}
                             onChange={(e) => setSearchKeyword(e.target.value)}
-                            className="w-full bg-transparent border-none text-xs text-cyan-100 p-2.5 focus:ring-0 placeholder-cyan-800 font-mono focus:outline-none"
+                            className="w-full bg-transparent border-none text-xs text-cyan-100 p-2.5 focus:ring-0 placeholder-cyan-600 font-mono focus:outline-none"
                         />
                     </div>
                 </div>

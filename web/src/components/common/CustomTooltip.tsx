@@ -65,7 +65,7 @@ export const CustomTooltip = ({active, payload, label, variant = 'light', unit =
                     return (
                         <p key={`${entry.dataKey ?? index}`} className={cn(
                             "flex items-center gap-2",
-                            isDark ? "text-cyan-400" : "text-xs"
+                            isDark ? "text-cyan-500" : "text-xs"
                         )}>
                             <span
                                 className="inline-block h-2 w-2 rounded-full"

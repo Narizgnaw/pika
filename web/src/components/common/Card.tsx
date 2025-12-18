@@ -31,7 +31,7 @@ export const Card = ({
                             <h2 className={cn(
                                 "text-sm font-bold",
                                 isDark
-                                    ? "font-mono uppercase tracking-widest text-cyan-400"
+                                    ? "font-mono uppercase tracking-widest text-cyan-500"
                                     : "text-lg font-semibold text-slate-900 dark:text-white"
                             )}>
                                 {title}
@@ -40,7 +40,7 @@ export const Card = ({
                         {description && (
                             <p className={cn(
                                 "mt-1 text-xs",
-                                isDark ? "text-cyan-400" : "text-sm text-slate-500 dark:text-slate-400"
+                                isDark ? "text-cyan-500" : "text-sm text-slate-500 dark:text-slate-400"
                             )}>
                                 {description}
                             </p>

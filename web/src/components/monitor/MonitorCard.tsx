@@ -21,7 +21,7 @@ const TypeIcon = ({type}: { type: string }) => {
         case 'TCP':
             return <Server className="w-4 h-4 text-amber-400"/>;
         case 'ICMP':
-            return <Wifi className="w-4 h-4 text-cyan-400"/>;
+            return <Wifi className="w-4 h-4 text-cyan-500"/>;
         default:
             return <Activity className="w-4 h-4 text-slate-400"/>;
     }
@@ -82,10 +82,10 @@ const MonitorCard = ({monitor, displayMode}: {
                         <TypeIcon type={monitor.type}/>
                     </div>
                     <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-sm text-cyan-100 tracking-wide truncate group-hover:text-cyan-400 transition-colors">
+                        <h3 className="font-bold text-sm text-cyan-100 tracking-wide truncate group-hover:text-cyan-500 transition-colors">
                             {monitor.name}
                         </h3>
-                        <div className="text-xs font-mono text-cyan-400 mb-0.5 tracking-wider truncate">
+                        <div className="text-xs font-mono text-cyan-500/80 mb-0.5 tracking-wider truncate">
                             {monitor.target}
                         </div>
                     </div>
@@ -98,7 +98,7 @@ const MonitorCard = ({monitor, displayMode}: {
             {/* 指标信息 */}
             <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                    <p className="text-xs text-cyan-400 mb-1 flex items-center gap-1">
+                    <p className="text-xs text-cyan-500 mb-1 flex items-center gap-1">
                         {displayLabel}
                         {monitor.agentCount > 0 && (
                             <span
@@ -109,13 +109,13 @@ const MonitorCard = ({monitor, displayMode}: {
                     </p>
                     <div
                         className={`text-xl font-bold flex items-baseline gap-1 ${displayValue > 200 ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]' : 'text-white drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]'}`}>
-                        {displayValue}<span className="text-xs text-cyan-400 font-normal">ms</span>
+                        {displayValue}<span className="text-xs text-cyan-500 font-normal">ms</span>
                     </div>
                 </div>
                 <div>
                     {monitor.type === 'https' && monitor.certExpiryTime ? (
                         <>
-                            <p className="text-xs text-cyan-400 mb-1">SSL 证书</p>
+                            <p className="text-xs text-cyan-500 mb-1">SSL 证书</p>
                             <CertBadge
                                 expiryTime={monitor.certExpiryTime}
                                 daysLeft={monitor.certDaysLeft}
@@ -123,7 +123,7 @@ const MonitorCard = ({monitor, displayMode}: {
                         </>
                     ) : (
                         <>
-                            <p className="text-xs text-cyan-400 mb-1">上次检测</p>
+                            <p className="text-xs text-cyan-500 mb-1">上次检测</p>
                             <p className="text-sm font-medium text-cyan-300 font-mono">
                                 {formatDateTime(monitor.lastCheckTime)}
                             </p>

@@ -17,7 +17,7 @@ export const LoadingSpinner = ({variant = 'light', message}: LoadingSpinnerProps
             <div className="flex flex-col items-center gap-3">
                 <Loader2 className={cn(
                     "h-8 w-8 animate-spin",
-                    isDark ? "text-cyan-400" : "text-blue-500"
+                    isDark ? "text-cyan-500" : "text-blue-500"
                 )}/>
                 <p className={cn(
                     "text-sm font-mono",

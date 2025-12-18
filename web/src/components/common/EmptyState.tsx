@@ -21,14 +21,14 @@ export const EmptyState = ({variant = 'light', message, showBackButton = false}:
                 <div className={cn(
                     "flex items-center justify-center",
                     isDark
-                        ? "h-16 w-16 rounded-lg bg-cyan-500/10 text-cyan-400"
+                        ? "h-16 w-16 rounded-lg bg-cyan-500/10 text-cyan-500"
                         : "h-16 w-16 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500"
                 )}>
                     <Icon className="h-8 w-8"/>
                 </div>
                 <p className={cn(
                     "text-sm font-mono",
-                    isDark ? "text-cyan-400" : "text-slate-600 dark:text-slate-400"
+                    isDark ? "text-cyan-500" : "text-slate-600 dark:text-slate-400"
                 )}>
                     {message || defaultMessage}
                 </p>
