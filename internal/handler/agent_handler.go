@@ -404,10 +404,7 @@ func (h *AgentHandler) GetMetrics(c echo.Context) error {
 	if interfaceName == "" {
 		interfaceName = "all"
 	}
-	aggregation, ok := normalizeAggregation(c.QueryParam("aggregation"))
-	if !ok {
-		return orz.NewError(400, "无效的聚合方式")
-	}
+	aggregation := normalizeAggregation(c.QueryParam("aggregation"))
 
 	// 验证指标类型
 	validTypes := map[string]bool{
