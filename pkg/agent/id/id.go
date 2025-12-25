@@ -18,12 +18,12 @@ type Manager struct {
 // NewManager 创建 ID 管理器
 func NewManager() *Manager {
 	return &Manager{
-		idFilePath: getIDFilePath(),
+		idFilePath: GetIDFilePath(),
 	}
 }
 
-// getIDFilePath 获取 ID 文件路径
-func getIDFilePath() string {
+// GetIDFilePath 获取 ID 文件路径
+func GetIDFilePath() string {
 	// 获取用户主目录
 	var homeDir = utils.GetSafeHomeDir()
 	// 统一使用 ~/.pika/agent.id

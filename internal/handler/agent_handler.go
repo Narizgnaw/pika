@@ -713,8 +713,29 @@ func (h *AgentHandler) Delete(c echo.Context) error {
 		return err
 	}
 
-	// 如果探针在线，先断开连接
+	// 如果探针在线，先发送卸载指令，然后断开连接
 	if client, exists := h.wsManager.GetClient(agentID); exists {
+		// 构建卸载消息
+		uninstallMsg, err := json.Marshal(protocol.OutboundMessage{
+			Type: protocol.MessageTypeUninstall,
+			Data: struct{}{}, // 空数据，卸载指令不需要额外参数
+		})
+		if err == nil {
+			// 发送卸载指令（忽略发送错误，继续删除流程）
+			if err := h.wsManager.SendToClient(agentID, uninstallMsg); err != nil {
+				h.logger.Warn("发送卸载指令失败",
+					zap.String("agentID", agentID),
+					zap.Error(err))
+			} else {
+				h.logger.Info("已向探针发送卸载指令",
+					zap.String("agentID", agentID),
+					zap.String("name", agent.Name))
+				// 等待一小段时间让探针处理卸载消息
+				time.Sleep(500 * time.Millisecond)
+			}
+		}
+
+		// 断开连接
 		client.Conn.Close()
 	}
 

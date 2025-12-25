@@ -296,6 +296,8 @@ func (a *Agent) readLoop(conn *websocket.Conn, done chan struct{}) error {
 			go a.handleTamperProtect(msg.Data)
 		case protocol.MessageTypeDDNSConfig:
 			go a.handleDDNSConfig(msg.Data)
+		case protocol.MessageTypeUninstall:
+			go a.handleUninstall()
 		default:
 			// 忽略其他类型
 		}
@@ -827,5 +829,29 @@ func (a *Agent) getIPAddress(manager *collector.Manager, method, value string, i
 		return manager.GetInterfaceIP(value, isIPv6)
 	default:
 		return "", fmt.Errorf("不支持的 IP 获取方式: %s", method)
+	}
+}
+
+// handleUninstall 处理服务端发送的卸载指令
+func (a *Agent) handleUninstall() {
+	log.Println("📥 收到服务端卸载指令，开始执行卸载...")
+
+	// 获取配置文件路径
+	cfgPath := a.cfg.Path
+	if cfgPath == "" {
+		cfgPath = config.GetDefaultConfigPath()
+	}
+
+	// 执行卸载操作
+	if err := UninstallAgent(cfgPath); err != nil {
+		log.Printf("❌ 卸载失败: %v", err)
+		return
+	}
+
+	log.Println("✅ 探针卸载成功，即将退出...")
+
+	// 卸载成功后，触发停止信号
+	if a.cancel != nil {
+		a.cancel()
 	}
 }
