@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/dushixiang/pika/pkg/agent/utils"
 	"gopkg.in/yaml.v3"
 )
 
@@ -107,10 +108,7 @@ func DefaultConfig() *Config {
 
 // GetDefaultConfigPath 获取默认配置文件路径
 func GetDefaultConfigPath() string {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		homeDir = "."
-	}
+	var homeDir = utils.GetSafeHomeDir()
 	return filepath.Join(homeDir, ".pika", "agent.yaml")
 }
 

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/dushixiang/pika/pkg/agent/utils"
 	"github.com/google/uuid"
 )
 
@@ -24,12 +25,7 @@ func NewManager() *Manager {
 // getIDFilePath 获取 ID 文件路径
 func getIDFilePath() string {
 	// 获取用户主目录
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		// 如果无法获取主目录，使用当前目录
-		homeDir = "."
-	}
-
+	var homeDir = utils.GetSafeHomeDir()
 	// 统一使用 ~/.pika/agent.id
 	return filepath.Join(homeDir, ".pika", "agent.id")
 }
