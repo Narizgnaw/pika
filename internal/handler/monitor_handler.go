@@ -202,7 +202,7 @@ func (h *MonitorHandler) GetHistoryByID(c echo.Context) error {
 		return orz.NewError(400, err.Error())
 	}
 
-	history, err := h.monitorService.GetMonitorHistory(ctx, id, start, end, aggregation)
+	history, err := h.metricService.GetMonitorHistory(ctx, id, start, end, aggregation)
 	if err != nil {
 		return err
 	}

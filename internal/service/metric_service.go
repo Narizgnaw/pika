@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -296,6 +297,38 @@ func (s *MetricService) GetMetrics(ctx context.Context, agentID, metricType stri
 	}, nil
 }
 
+// CleanMonitorCache 清理监控任务缓存中不再关联的探针数据
+func (s *MetricService) CleanMonitorCache(ctx context.Context, monitorID string) error {
+	// 从缓存读取监控数据
+	latestMetrics, ok := s.monitorLatestCache.Get(monitorID)
+	if !ok {
+		// 缓存不存在，无需清理
+		return nil
+	}
+
+	// 查询监控任务配置
+	monitorTask, err := s.monitorRepo.FindById(ctx, monitorID)
+	if err != nil {
+		return err
+	}
+
+	// 只在有过滤条件（指定了 AgentIds）时清理缓存
+	if len(monitorTask.AgentIds) > 0 {
+		// 遍历缓存中的探针，移除不再关联的探针数据
+		for agentId := range latestMetrics.Agents.Keys() {
+			if !slices.Contains(monitorTask.AgentIds, agentId) {
+				// 该探针已不再关联到此监控任务，从缓存中移除
+				latestMetrics.Agents.Delete(agentId)
+				s.logger.Debug("从监控缓存中移除探针",
+					zap.String("monitorID", monitorID),
+					zap.String("agentID", agentId))
+			}
+		}
+	}
+
+	return nil
+}
+
 // updateMonitorCache 更新监控数据缓存
 func (s *MetricService) updateMonitorCache(agentID string, monitorData *protocol.MonitorData, timestamp int64) {
 	monitorID := monitorData.MonitorId
@@ -572,6 +605,13 @@ func (s *MetricService) buildMonitorPromQLQueries(monitorID string, aggregation 
 
 // GetMonitorHistory 获取监控任务的历史趋势数据
 func (s *MetricService) GetMonitorHistory(ctx context.Context, monitorID string, start, end int64, aggregation string) (*metric.GetMetricsResponse, error) {
+	// 查询监控任务配置
+	monitorTask, err := s.monitorRepo.FindById(ctx, monitorID)
+	if err != nil {
+		s.logger.Error("查询监控任务失败", zap.String("monitorID", monitorID), zap.Error(err))
+		return nil, err
+	}
+
 	step := vmclient.AutoStep(time.UnixMilli(start), time.UnixMilli(end))
 	queries := s.buildMonitorPromQLQueries(monitorID, aggregation, step)
 
@@ -592,11 +632,26 @@ func (s *MetricService) GetMonitorHistory(ctx context.Context, monitorID string,
 		series = append(series, convertedSeries...)
 	}
 
-	// 收集所有 agent_id
+	// 过滤掉已取消关联的 agent 数据（仅在有过滤条件时）
 	agentIdSet := make(map[string]struct{})
-	for _, s := range series {
-		if agentId, ok := s.Labels["agent_id"]; ok {
-			agentIdSet[agentId] = struct{}{}
+	if len(monitorTask.AgentIds) > 0 {
+		// 有过滤条件，只保留当前关联的 agent 数据
+		filteredSeries := make([]metric.Series, 0)
+		for _, s := range series {
+			if agentId, ok := s.Labels["agent_id"]; ok {
+				if slices.Contains(monitorTask.AgentIds, agentId) {
+					filteredSeries = append(filteredSeries, s)
+					agentIdSet[agentId] = struct{}{}
+				}
+			}
+		}
+		series = filteredSeries
+	} else {
+		// 无过滤条件，收集所有 agent_id
+		for _, s := range series {
+			if agentId, ok := s.Labels["agent_id"]; ok {
+				agentIdSet[agentId] = struct{}{}
+			}
 		}
 	}
 
@@ -645,14 +700,31 @@ func (s *MetricService) GetMonitorAgentStats(monitorID string) []protocol.Monito
 		return []protocol.MonitorData{}
 	}
 
-	// 收集所有 agentId
-	agentIds := make([]string, 0, latestMetrics.Agents.Len())
-	for agentId := range latestMetrics.Agents.Keys() {
-		agentIds = append(agentIds, agentId)
+	// 查询监控任务配置
+	ctx := context.Background()
+	monitorTask, err := s.monitorRepo.FindById(ctx, monitorID)
+	if err != nil {
+		s.logger.Error("查询监控任务失败", zap.String("monitorID", monitorID), zap.Error(err))
+		return []protocol.MonitorData{}
+	}
+
+	// 收集所有当前关联的 agentId（从缓存中过滤）
+	agentIds := make([]string, 0)
+	if len(monitorTask.AgentIds) > 0 {
+		// 有过滤条件，只保留匹配的 agent
+		for agentId := range latestMetrics.Agents.Keys() {
+			if slices.Contains(monitorTask.AgentIds, agentId) {
+				agentIds = append(agentIds, agentId)
+			}
+		}
+	} else {
+		// 无过滤条件，返回所有缓存中的 agent
+		for agentId := range latestMetrics.Agents.Keys() {
+			agentIds = append(agentIds, agentId)
+		}
 	}
 
 	// 查询 agent 信息
-	ctx := context.Background()
 	agents, err := s.agentRepo.FindByIdIn(ctx, agentIds)
 	if err != nil {
 		s.logger.Error("查询 agent 信息失败", zap.Error(err))
@@ -665,10 +737,20 @@ func (s *MetricService) GetMonitorAgentStats(monitorID string) []protocol.Monito
 	}
 
 	// 转换为数组并填充 agent 名称
-	result := make([]protocol.MonitorData, 0, latestMetrics.Agents.Len())
+	result := make([]protocol.MonitorData, 0, len(agentIds))
 	for stat := range latestMetrics.Agents.Values() {
-		stat.AgentName = agentNameMap[stat.AgentId] // 填充 agent 名称
-		result = append(result, *stat)
+		// 根据过滤条件决定是否包含该 agent
+		if len(monitorTask.AgentIds) > 0 {
+			// 有过滤条件，只返回当前关联的 agent 数据
+			if slices.Contains(monitorTask.AgentIds, stat.AgentId) {
+				stat.AgentName = agentNameMap[stat.AgentId] // 填充 agent 名称
+				result = append(result, *stat)
+			}
+		} else {
+			// 无过滤条件，返回所有 agent 数据
+			stat.AgentName = agentNameMap[stat.AgentId] // 填充 agent 名称
+			result = append(result, *stat)
+		}
 	}
 
 	return result
@@ -685,12 +767,22 @@ func (s *MetricService) GetMonitorStats(monitorID string) *metric.MonitorStatsRe
 		}
 	}
 
+	// 查询监控任务配置
+	ctx := context.Background()
+	monitorTask, err := s.monitorRepo.FindById(ctx, monitorID)
+	if err != nil {
+		s.logger.Error("查询监控任务失败", zap.String("monitorID", monitorID), zap.Error(err))
+		return &metric.MonitorStatsResult{
+			Status: "unknown",
+		}
+	}
+
 	// 聚合各探针数据
-	return s.aggregateMonitorStats(latestMetrics)
+	return s.aggregateMonitorStats(latestMetrics, monitorTask.AgentIds)
 }
 
 // aggregateMonitorStats 聚合各探针的监控数据
-func (s *MetricService) aggregateMonitorStats(latestMetrics *metric.LatestMonitorMetrics) *metric.MonitorStatsResult {
+func (s *MetricService) aggregateMonitorStats(latestMetrics *metric.LatestMonitorMetrics, agentIds []string) *metric.MonitorStatsResult {
 	result := &metric.MonitorStatsResult{
 		Status: "unknown",
 	}
@@ -704,11 +796,21 @@ func (s *MetricService) aggregateMonitorStats(latestMetrics *metric.LatestMonito
 	var maxResponseTime int64
 	var lastCheckTime int64
 	var upCount, downCount, unknownCount int
+	var validCount int // 实际聚合的探针数量
 	hasCert := false
 	var minCertExpiryTime int64
 	var minCertDaysLeft int
 
 	for stat := range latestMetrics.Agents.Values() {
+		// 根据过滤条件决定是否聚合该探针
+		if len(agentIds) > 0 {
+			// 有过滤条件，只聚合当前关联的探针数据
+			if !slices.Contains(agentIds, stat.AgentId) {
+				continue
+			}
+		}
+
+		validCount++
 		totalResponseTime += stat.ResponseTime
 
 		// 计算响应时间的最小值和最大值
@@ -742,10 +844,9 @@ func (s *MetricService) aggregateMonitorStats(latestMetrics *metric.LatestMonito
 		}
 	}
 
-	count := latestMetrics.Agents.Len()
-	result.AgentCount = count
-	if count > 0 {
-		result.ResponseTime = totalResponseTime / int64(count)
+	result.AgentCount = validCount
+	if validCount > 0 {
+		result.ResponseTime = totalResponseTime / int64(validCount)
 	}
 	result.ResponseTimeMin = minResponseTime
 	result.ResponseTimeMax = maxResponseTime
