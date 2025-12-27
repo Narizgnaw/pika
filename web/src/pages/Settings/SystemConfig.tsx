@@ -232,23 +232,42 @@ const SystemConfigComponent = () => {
                             {({getFieldValue}) => {
                                 const systemNameEn = getFieldValue('systemNameEn') || '';
                                 const systemNameZh = getFieldValue('systemNameZh') || '';
+
+                                // 与 PublicHeader 相同的分割逻辑
+                                let leftName = '';
+                                let rightName = '';
+
+                                if (systemNameEn) {
+                                    // 优先在空格处分割
+                                    const spaceIndex = systemNameEn.indexOf(' ');
+                                    if (spaceIndex > 0) {
+                                        leftName = systemNameEn.substring(0, spaceIndex);
+                                        rightName = systemNameEn.substring(spaceIndex); // 保留空格
+                                    } else {
+                                        // 如果没有空格，从中间分割
+                                        const mid = Math.floor(systemNameEn.length / 2);
+                                        leftName = systemNameEn.substring(0, mid);
+                                        rightName = systemNameEn.substring(mid);
+                                    }
+                                }
+
                                 return (
-                                    <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg">
+                                    <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
                                         <img
                                             src={getLogoUrl()}
                                             alt="Logo 预览"
-                                            className="h-10 w-10 object-contain rounded-md"
+                                            className="h-8 w-8 sm:h-9 sm:w-9 object-contain rounded-md"
                                             onError={(e) => {
                                                 e.currentTarget.src = '/logo.png';
                                             }}
                                         />
                                         <div>
-                                            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-blue-600">
-                                                {systemNameEn}
-                                            </p>
-                                            <h1 className="text-sm font-bold text-slate-900">
-                                                {systemNameZh}
+                                            <h1 className="text-2xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 dark:from-cyan-400 dark:via-blue-400 dark:to-purple-400 uppercase italic">
+                                                {leftName}<span className="text-slate-800 dark:text-white">{rightName}</span>
                                             </h1>
+                                            <p className="text-xs text-slate-500 dark:text-cyan-500 font-mono tracking-[0.3em] uppercase">
+                                                {systemNameZh}
+                                            </p>
                                         </div>
                                     </div>
                                 );

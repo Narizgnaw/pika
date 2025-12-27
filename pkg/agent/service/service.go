@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/dushixiang/pika/pkg/agent/config"
+	"github.com/dushixiang/pika/pkg/agent/id"
 	"github.com/dushixiang/pika/pkg/agent/sysutil"
 	"github.com/dushixiang/pika/pkg/agent/updater"
 	"github.com/kardianos/service"
@@ -232,6 +233,49 @@ func (m *ServiceManager) Run() error {
 	// 等待 Agent 停止
 	agent.Stop()
 	log.Println("✅ 探针已停止")
+
+	return nil
+}
+
+// UninstallAgent 执行探针卸载操作（可被复用）
+func UninstallAgent(cfgPath string) error {
+	// 加载配置
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return fmt.Errorf("加载配置失败: %w", err)
+	}
+
+	// 创建服务管理器
+	mgr, err := NewServiceManager(cfg)
+	if err != nil {
+		return fmt.Errorf("创建服务管理器失败: %w", err)
+	}
+
+	// 检查服务状态，如果在运行则停止
+	status, err := mgr.Status()
+	if err != nil {
+		log.Printf("⚠️  获取服务状态失败: %v", err)
+	} else if status != "已停止 (Stopped)" {
+		if err := mgr.Stop(); err != nil {
+			return fmt.Errorf("停止服务失败: %w", err)
+		}
+	}
+
+	// 卸载服务
+	if err := mgr.Uninstall(); err != nil {
+		return fmt.Errorf("卸载服务失败: %w", err)
+	}
+
+	// 删除配置文件
+	if err := os.Remove(cfgPath); err != nil {
+		log.Printf("⚠️  删除配置文件失败: %v", err)
+	}
+
+	// 删除探针 ID 文件
+	idPath := id.GetIDFilePath()
+	if err := os.Remove(idPath); err != nil {
+		log.Printf("⚠️  删除探针 ID 文件失败: %v", err)
+	}
 
 	return nil
 }

@@ -253,7 +253,7 @@ const ServerList = () => {
                                 <th className="p-5 font-bold w-[250px]">Identity</th>
                                 <th className="p-5 font-bold">Telemetry</th>
                                 <th className="p-5 font-bold w-[220px]">I/O Rate</th>
-                                <th className="p-5 font-bold w-[150px]">Status</th>
+                                <th className="p-5 font-bold w-[150px]">Network</th>
                                 <th className="p-5 font-bold w-[200px]">Meta / Tags</th>
                             </tr>
                             </thead>
@@ -399,17 +399,17 @@ const ServerList = () => {
                                                         <Network className="w-3 h-3 text-emerald-600 dark:text-emerald-400"/>
                                                         <span
                                                             className="text-emerald-600 dark:text-emerald-400">{netConn.established || 0}</span>
-                                                        <span className="text-gray-600 dark:text-cyan-500">已建立</span>
+                                                        <span className="text-gray-600 dark:text-cyan-500">ESTABLISHED</span>
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <Network className="w-3 h-3 text-blue-600 dark:text-blue-400"/>
                                                         <span className="text-blue-600 dark:text-blue-400">{netConn.listen || 0}</span>
-                                                        <span className="text-gray-600 dark:text-cyan-500">监听中</span>
+                                                        <span className="text-gray-600 dark:text-cyan-500">LISTEN</span>
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <Network className="w-3 h-3 text-rose-600 dark:text-rose-400"/>
                                                         <span className="text-rose-600 dark:text-rose-400">{netConn.closeWait || 0}</span>
-                                                        <span className="text-gray-600 dark:text-cyan-500">等待关闭</span>
+                                                        <span className="text-gray-600 dark:text-cyan-500">CLOSE_WAIT</span>
                                                     </div>
                                                 </div>
                                             ) : (
@@ -429,7 +429,11 @@ const ServerList = () => {
                                                     ))}
                                                 </div>
                                                 <div
-                                                    className={`text-xs font-mono flex items-center gap-1 ${server.expireTime && server.expireTime > 0 ? 'text-cyan-600 dark:text-cyan-500' : 'text-emerald-600 dark:text-emerald-400/80'}`}>
+                                                    className={cn(
+                                                        `text-xs font-mono flex items-center gap-1 text-gray-600 dark:text-cyan-500`,
+                                                        // 剩余时间小于 30 天时显示为红色
+                                                        server.expireTime && server.expireTime > 0 && server.expireTime - Date.now() < 30 * 24 * 60 * 60 * 1000 ? 'text-red-600 dark:text-red-400' : ''
+                                                    )}>
 
                                                     {server.expireTime > 0 &&
                                                         <div className={'flex items-center gap-1'}>

@@ -160,7 +160,6 @@ const AgentList = () => {
             title: '名称',
             dataIndex: 'name',
             key: 'name',
-            hideInSearch: true,
             fixed: 'left',
             render: (_, record) => (
                 <div className="space-y-1">
@@ -266,6 +265,7 @@ const AgentList = () => {
             title: '版本',
             dataIndex: 'version',
             key: 'version',
+            hideInSearch: true,
         },
         {
             title: '最后活跃时间',

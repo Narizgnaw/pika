@@ -52,6 +52,7 @@ const (
 	MessageTypeHeartbeat   MessageType = "heartbeat"
 	MessageTypeCommand     MessageType = "command"
 	MessageTypeCommandResp MessageType = "command_response"
+	MessageTypeUninstall   MessageType = "uninstall"
 	// 指标消息
 	MessageTypeMetrics       MessageType = "metrics"
 	MessageTypeMonitorConfig MessageType = "monitor_config"
