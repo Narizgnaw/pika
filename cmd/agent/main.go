@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/dushixiang/pika/pkg/agent/config"
 	"github.com/dushixiang/pika/pkg/agent/service"
 	"github.com/dushixiang/pika/pkg/agent/updater"
+	"github.com/dushixiang/pika/pkg/agent/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -237,23 +239,9 @@ func installService(cmd *cobra.Command, args []string) {
 
 // uninstallService 卸载服务
 func uninstallService(cmd *cobra.Command, args []string) {
-	// 加载配置
-	cfg, err := config.Load(configPath)
-	if err != nil {
-		log.Fatalf("❌ 加载配置失败: %v", err)
+	if err := service.UninstallAgent(configPath); err != nil {
+		log.Fatalf("❌ 卸载失败: %v", err)
 	}
-
-	// 创建服务管理器
-	mgr, err := service.NewServiceManager(cfg)
-	if err != nil {
-		log.Fatalf("❌ 创建服务管理器失败: %v", err)
-	}
-
-	// 卸载服务
-	if err := mgr.Uninstall(); err != nil {
-		log.Fatalf("❌ 卸载服务失败: %v", err)
-	}
-
 	log.Println("✅ 服务卸载成功")
 }
 
@@ -477,7 +465,13 @@ func registerAgent(cmd *cobra.Command, args []string) {
 			APIKey:   apiKey,
 		},
 		Agent: config.AgentConfig{
-			Name: name,
+			Name:          name,
+			LogLevel:      "info",
+			LogFile:       getHomeLogPath(),
+			LogMaxSize:    100,
+			LogMaxBackups: 3,
+			LogMaxAge:     28,
+			LogCompress:   true,
 		},
 		Collector: config.CollectorConfig{
 			Interval:          5,
@@ -528,6 +522,11 @@ func maskToken(token string) string {
 		return "****"
 	}
 	return token[:4] + "****" + token[len(token)-4:]
+}
+
+func getHomeLogPath() string {
+	homeDir := utils.GetSafeHomeDir()
+	return filepath.Join(homeDir, ".pika", "logs", "agent.log")
 }
 
 // showInfo 显示配置信息

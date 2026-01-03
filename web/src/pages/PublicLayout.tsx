@@ -61,6 +61,12 @@ body {
 html {
     scrollbar-width: thin;
     scrollbar-color: var(--sb-thumb-color) var(--sb-track-color);
+    scrollbar-gutter: stable;
+}
+
+/* 6. 防止滚动条消失时页面宽度变化 */
+body {
+    scrollbar-gutter: stable;
 }
 `;
 

@@ -10,6 +10,18 @@ const OIDCCallback = () => {
 
     useEffect(() => {
         const handleCallback = async () => {
+            // 检查是否有错误参数
+            const error = searchParams.get('error');
+            if (error) {
+                const errorDescription = searchParams.get('error_description');
+                const errorMessage = errorDescription
+                    ? decodeURIComponent(errorDescription)
+                    : `认证失败: ${error}`;
+                messageApi.error(errorMessage);
+                navigate('/login');
+                return;
+            }
+
             const code = searchParams.get('code');
             const state = searchParams.get('state');
 

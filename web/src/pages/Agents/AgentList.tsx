@@ -160,7 +160,6 @@ const AgentList = () => {
             title: '名称',
             dataIndex: 'name',
             key: 'name',
-            hideInSearch: true,
             fixed: 'left',
             render: (_, record) => (
                 <div className="space-y-1">
@@ -266,6 +265,7 @@ const AgentList = () => {
             title: '版本',
             dataIndex: 'version',
             key: 'version',
+            hideInSearch: true,
         },
         {
             title: '最后活跃时间',
@@ -396,11 +396,12 @@ const AgentList = () => {
                     </Space>
                 )}
                 request={async (params) => {
-                    const {current = 1, pageSize = 10, hostname, ip, status} = params;
+                    const {current = 1, pageSize = 10, name, hostname, ip, status} = params;
                     try {
                         const response = await getAgentPaging(
                             current,
                             pageSize,
+                            name,
                             hostname,
                             ip,
                             status as string | undefined

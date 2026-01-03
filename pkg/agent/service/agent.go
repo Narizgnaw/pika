@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"runtime"
 	"sync"
@@ -17,6 +17,7 @@ import (
 	"github.com/dushixiang/pika/pkg/agent/collector"
 	"github.com/dushixiang/pika/pkg/agent/config"
 	"github.com/dushixiang/pika/pkg/agent/id"
+	"github.com/dushixiang/pika/pkg/agent/sshmonitor"
 	"github.com/dushixiang/pika/pkg/agent/tamper"
 	"github.com/dushixiang/pika/pkg/version"
 	"github.com/gorilla/websocket"
@@ -70,6 +71,7 @@ type Agent struct {
 	collectorMu      sync.RWMutex
 	collectorManager *collector.Manager
 	tamperProtector  *tamper.Protector
+	sshMonitor       *sshmonitor.Monitor
 }
 
 // New 创建 Agent 实例
@@ -78,6 +80,7 @@ func New(cfg *config.Config) *Agent {
 		cfg:             cfg,
 		idMgr:           id.NewManager(),
 		tamperProtector: tamper.NewProtector(),
+		sshMonitor:      sshmonitor.NewMonitor(),
 	}
 }
 
@@ -106,14 +109,14 @@ func (a *Agent) Start(ctx context.Context) error {
 
 		// 检查是否是上下文取消
 		if ctx.Err() != nil {
-			log.Println("收到停止信号，探针服务退出")
+			slog.Info("收到停止信号，探针服务退出")
 			return nil
 		}
 
 		// 连接建立失败或注册失败（使用 backoff）
 		if err != nil {
 			retryAfter := b.Duration()
-			log.Printf("⚠️  探针运行出错: %v，将在 %v 后重试", err, retryAfter)
+			slog.Warn("探针运行出错，将在后重试", "error", err, "retryAfter", retryAfter)
 
 			select {
 			case <-time.After(retryAfter):
@@ -124,7 +127,7 @@ func (a *Agent) Start(ctx context.Context) error {
 		}
 
 		// 理论上不会到这里
-		log.Println("连接意外结束")
+		slog.Info("连接意外结束")
 		return nil
 	}
 }
@@ -140,7 +143,7 @@ func (a *Agent) Stop() {
 // 返回 error 表示需要重连，返回 nil 可能是正常关闭或上下文取消
 func (a *Agent) runOnce(ctx context.Context, onConnected func()) error {
 	wsURL := a.cfg.GetWebSocketURL()
-	log.Printf("🔌 正在连接到服务器: %s", wsURL)
+	slog.Info("正在连接到服务器", "url", wsURL)
 
 	// 创建自定义的 Dialer
 	var dialer = websocket.DefaultDialer
@@ -148,7 +151,7 @@ func (a *Agent) runOnce(ctx context.Context, onConnected func()) error {
 		dialer.TLSClientConfig = &tls.Config{
 			InsecureSkipVerify: true,
 		}
-		log.Println("⚠️  警告: 已禁用 TLS 证书验证")
+		slog.Warn("警告: 已禁用 TLS 证书验证")
 	}
 
 	// 连接到服务器
@@ -168,7 +171,7 @@ func (a *Agent) runOnce(ctx context.Context, onConnected func()) error {
 		// WriteControl 有内置锁，可以安全调用
 		err := rawConn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(time.Second))
 		if err == nil {
-			//log.Println("💓 收到 Ping，已发送 Pong")
+			//slog.Info("收到 Ping，已发送 Pong")
 		}
 		return err
 	})
@@ -178,7 +181,7 @@ func (a *Agent) runOnce(ctx context.Context, onConnected func()) error {
 		return fmt.Errorf("注册失败: %w", err)
 	}
 
-	log.Println("✅ 探针注册成功，开始监控...")
+	slog.Info("探针注册成功，开始监控...")
 
 	// 创建采集器管理器
 	collectorManager := collector.NewManager(a.cfg)
@@ -237,16 +240,21 @@ func (a *Agent) runOnce(ctx context.Context, onConnected func()) error {
 		a.tamperAlertLoop(ctx, conn, done)
 	})
 
+	// 启动 SSH 登录事件监控
+	wg.Go(func() {
+		a.sshLoginEventLoop(ctx, conn, done)
+	})
+
 	// 等待第一个错误或上下文取消
 	var returnErr error
 	select {
 	case err := <-errChan:
 		// 连接已建立，无论什么原因断开都标记为已建立状态
-		log.Printf("连接断开: %v", err)
+		slog.Info("连接断开", "error", err)
 		returnErr = ErrConnectionEstablished
 	case <-ctx.Done():
 		// 收到取消信号
-		log.Println("收到停止信号，准备关闭连接")
+		slog.Info("收到停止信号，准备关闭连接")
 		returnErr = ctx.Err()
 	}
 
@@ -256,7 +264,7 @@ func (a *Agent) runOnce(ctx context.Context, onConnected func()) error {
 	// 发送 WebSocket 关闭消息
 	closeMsg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")
 	if err := conn.WriteMessage(websocket.CloseMessage, closeMsg); err != nil {
-		log.Printf("⚠️  发送关闭消息失败: %v", err)
+		slog.Warn("发送关闭消息失败", "error", err)
 	}
 
 	// 等待所有 goroutine 优雅退出
@@ -283,7 +291,7 @@ func (a *Agent) readLoop(conn *websocket.Conn, done chan struct{}) error {
 		// 解析消息
 		var msg protocol.InputMessage
 		if err := json.Unmarshal(message, &msg); err != nil {
-			log.Printf("⚠️  解析消息失败: %v", err)
+			slog.Warn("解析消息失败", "error", err)
 			continue
 		}
 
@@ -296,6 +304,10 @@ func (a *Agent) readLoop(conn *websocket.Conn, done chan struct{}) error {
 			go a.handleTamperProtect(msg.Data)
 		case protocol.MessageTypeDDNSConfig:
 			go a.handleDDNSConfig(msg.Data)
+		case protocol.MessageTypeSSHLoginConfig:
+			go a.handleSSHLoginConfig(conn, msg.Data)
+		case protocol.MessageTypeUninstall:
+			go a.handleUninstall()
 		default:
 			// 忽略其他类型
 		}
@@ -309,7 +321,7 @@ func (a *Agent) registerAgent(conn *safeConn) error {
 	if err != nil {
 		return fmt.Errorf("加载 agent ID 失败: %w", err)
 	}
-	log.Printf("🆔 Agent ID: %s (存储在: %s)", agentID, a.idMgr.GetPath())
+	slog.Info("Agent ID", "id", agentID, "path", a.idMgr.GetPath())
 
 	// 获取主机信息
 	hostname, _ := os.Hostname()
@@ -367,36 +379,36 @@ func (a *Agent) registerAgent(conn *safeConn) error {
 		return fmt.Errorf("解析注册响应失败: %w", err)
 	}
 
-	log.Printf("注册成功: AgentId=%s, Status=%s", registerResp.AgentID, registerResp.Status)
+	slog.Info("注册成功", "agentId", registerResp.AgentID, "status", registerResp.Status)
 	return nil
 }
 
 func (a *Agent) handleMonitorConfig(data json.RawMessage) {
 	var payload protocol.MonitorConfigPayload
 	if err := json.Unmarshal(data, &payload); err != nil {
-		log.Printf("⚠️  解析监控配置失败: %v", err)
+		slog.Warn("解析监控配置失败", "error", err)
 		return
 	}
 
 	if len(payload.Items) == 0 {
-		log.Println("ℹ️  收到空的服务监控配置，跳过")
+		slog.Info("收到空的服务监控配置，跳过")
 		return
 	}
 
 	conn := a.getActiveConn()
 	manager := a.getCollectorManager()
 	if conn == nil || manager == nil {
-		log.Println("⚠️  当前连接未就绪，无法执行服务监控任务")
+		slog.Warn("当前连接未就绪，无法执行服务监控任务")
 		return
 	}
 
-	log.Printf("📥 收到服务监控配置，总计 %d 个监控项，立即执行检测", len(payload.Items))
+	slog.Info("收到服务监控配置，立即执行检测", "count", len(payload.Items))
 
 	// 立即执行一次监控检测
 	if err := manager.CollectAndSendMonitor(conn, payload.Items); err != nil {
-		log.Printf("⚠️  监控检测失败: %v", err)
+		slog.Warn("监控检测失败", "error", err)
 	} else {
-		log.Printf("✅ 服务监控检测完成，已上报 %d 个监控项结果", len(payload.Items))
+		slog.Info("服务监控检测完成，已上报监控项结果", "count", len(payload.Items))
 	}
 }
 
@@ -414,7 +426,7 @@ func (a *Agent) heartbeatLoop(ctx context.Context, conn *safeConn, done chan str
 			}); err != nil {
 				return fmt.Errorf("发送心跳失败: %w", err)
 			}
-			//log.Println("💓 心跳已发送")
+			//slog.Info("心跳已发送")
 		case <-done:
 			return nil
 		case <-ctx.Done():
@@ -451,7 +463,7 @@ func (a *Agent) getCollectorManager() *collector.Manager {
 func (a *Agent) metricsLoop(ctx context.Context, conn *safeConn, manager *collector.Manager, done chan struct{}) error {
 	// 立即采集一次动态数据
 	if err := a.collectAndSendAllMetrics(conn, manager); err != nil {
-		log.Printf("⚠️  初始数据采集失败: %v", err)
+		slog.Warn("初始数据采集失败", "error", err)
 	}
 
 	// 定时采集动态指标
@@ -479,54 +491,54 @@ func (a *Agent) collectAndSendAllMetrics(conn *safeConn, manager *collector.Mana
 
 	// CPU 动态指标
 	if err := manager.CollectAndSendCPU(conn); err != nil {
-		log.Printf("⚠️  发送CPU指标失败: %v", err)
+		slog.Warn("发送CPU指标失败", "error", err)
 		hasError = true
 	}
 
 	// 内存动态指标
 	if err := manager.CollectAndSendMemory(conn); err != nil {
-		log.Printf("⚠️  发送内存指标失败: %v", err)
+		slog.Warn("发送内存指标失败", "error", err)
 		hasError = true
 	}
 
 	// 磁盘指标
 	if err := manager.CollectAndSendDisk(conn); err != nil {
-		log.Printf("⚠️  发送磁盘指标失败: %v", err)
+		slog.Warn("发送磁盘指标失败", "error", err)
 		hasError = true
 	}
 
 	// 磁盘 IO 指标
 	if err := manager.CollectAndSendDiskIO(conn); err != nil {
-		log.Printf("⚠️  发送磁盘IO指标失败: %v", err)
+		slog.Warn("发送磁盘IO指标失败", "error", err)
 		hasError = true
 	}
 
 	// 网络指标
 	if err := manager.CollectAndSendNetwork(conn); err != nil {
-		log.Printf("⚠️  发送网络指标失败: %v", err)
+		slog.Warn("发送网络指标失败", "error", err)
 		hasError = true
 	}
 
 	// 网络连接统计
 	if err := manager.CollectAndSendNetworkConnection(conn); err != nil {
-		log.Printf("⚠️  发送网络连接统计失败: %v", err)
+		slog.Warn("发送网络连接统计失败", "error", err)
 		hasError = true
 	}
 
 	// 主机信息
 	if err := manager.CollectAndSendHost(conn); err != nil {
-		log.Printf("⚠️  发送主机信息失败: %v", err)
+		slog.Warn("发送主机信息失败", "error", err)
 		hasError = true
 	}
 
 	// GPU 信息（可选）
 	if err := manager.CollectAndSendGPU(conn); err != nil {
-		log.Printf("ℹ️  发送GPU信息失败: %v", err)
+		slog.Info("发送GPU信息失败", "error", err)
 	}
 
 	// 温度信息（可选）
 	if err := manager.CollectAndSendTemperature(conn); err != nil {
-		log.Printf("ℹ️  发送温度信息失败: %v", err)
+		slog.Info("发送温度信息失败", "error", err)
 	}
 
 	if hasError {
@@ -540,11 +552,11 @@ func (a *Agent) collectAndSendAllMetrics(conn *safeConn, manager *collector.Mana
 func (a *Agent) handleCommand(data json.RawMessage) {
 	var cmdReq protocol.CommandRequest
 	if err := json.Unmarshal(data, &cmdReq); err != nil {
-		log.Printf("⚠️  解析指令失败: %v", err)
+		slog.Warn("解析指令失败", "error", err)
 		return
 	}
 
-	log.Printf("📥 收到指令: %s (ID: %s)", cmdReq.Type, cmdReq.ID)
+	slog.Info("收到指令", "type", cmdReq.Type, "id", cmdReq.ID)
 
 	conn := a.getActiveConn()
 	// 发送运行中状态
@@ -554,7 +566,7 @@ func (a *Agent) handleCommand(data json.RawMessage) {
 	case "vps_audit":
 		a.handleVPSAudit(conn, cmdReq.ID)
 	default:
-		log.Printf("⚠️  未知指令类型: %s", cmdReq.Type)
+		slog.Warn("未知指令类型", "type", cmdReq.Type)
 		a.sendCommandResponse(conn, cmdReq.ID, cmdReq.Type, "error", "未知指令类型", "")
 	}
 }
@@ -564,7 +576,7 @@ func (a *Agent) handleVPSAudit(conn *safeConn, cmdID string) {
 	// 导入 audit 包
 	result, err := a.runVPSAudit()
 	if err != nil {
-		log.Printf("❌ VPS安全审计失败: %v", err)
+		slog.Error("VPS安全审计失败", "error", err)
 		a.sendCommandResponse(conn, cmdID, "vps_audit", "error", err.Error(), "")
 		return
 	}
@@ -572,12 +584,12 @@ func (a *Agent) handleVPSAudit(conn *safeConn, cmdID string) {
 	// 将结果序列化为JSON
 	resultJSON, err := json.Marshal(result)
 	if err != nil {
-		log.Printf("❌ 序列化审计结果失败: %v", err)
+		slog.Error("序列化审计结果失败", "error", err)
 		a.sendCommandResponse(conn, cmdID, "vps_audit", "error", "序列化结果失败", "")
 		return
 	}
 
-	log.Println("✅ VPS安全审计完成")
+	slog.Info("VPS安全审计完成")
 	a.sendCommandResponse(conn, cmdID, "vps_audit", "success", "", string(resultJSON))
 }
 
@@ -600,7 +612,7 @@ func (a *Agent) sendCommandResponse(conn *safeConn, cmdID, cmdType, status, errM
 		Type: protocol.MessageTypeCommandResp,
 		Data: resp,
 	}); err != nil {
-		log.Printf("⚠️  发送指令响应失败: %v", err)
+		slog.Warn("发送指令响应失败", "error", err)
 	}
 }
 
@@ -613,22 +625,22 @@ func GetVersion() string {
 func (a *Agent) handleTamperProtect(data json.RawMessage) {
 	var tamperProtectConfig protocol.TamperProtectConfig
 	if err := json.Unmarshal(data, &tamperProtectConfig); err != nil {
-		log.Printf("⚠️  解析防篡改保护配置失败: %v", err)
+		slog.Warn("解析防篡改保护配置失败", "error", err)
 		a.sendTamperProtectResponse(false, "解析配置失败", nil, nil, nil, err.Error())
 		return
 	}
 
-	log.Printf("📥 收到防篡改保护增量配置: Added=%v, Removed=%v", tamperProtectConfig.Added, tamperProtectConfig.Removed)
+	slog.Info("收到防篡改保护增量配置", "added", tamperProtectConfig.Added, "removed", tamperProtectConfig.Removed)
 
 	conn := a.getActiveConn()
 	if conn == nil {
-		log.Println("⚠️  当前连接未就绪，无法执行防篡改保护")
+		slog.Warn("当前连接未就绪，无法执行防篡改保护")
 		return
 	}
 
 	// 如果没有新增也没有移除，不需要做任何操作
 	if len(tamperProtectConfig.Added) == 0 && len(tamperProtectConfig.Removed) == 0 {
-		log.Println("ℹ️  配置无变化，跳过更新")
+		slog.Info("配置无变化，跳过更新")
 		a.sendTamperProtectResponse(true, "配置无变化", a.tamperProtector.GetProtectedPaths(), []string{}, []string{}, "")
 		return
 	}
@@ -638,7 +650,7 @@ func (a *Agent) handleTamperProtect(data json.RawMessage) {
 	// 应用增量更新
 	result, err := a.tamperProtector.ApplyIncrementalUpdate(ctx, tamperProtectConfig.Added, tamperProtectConfig.Removed)
 	if err != nil {
-		log.Printf("⚠️  应用增量更新失败: %v", err)
+		slog.Warn("应用增量更新失败", "error", err)
 		// 即使有错误也返回部分成功的结果
 		if result != nil {
 			a.sendTamperProtectResponse(false, "部分更新失败", result.Current, result.Added, result.Removed, err.Error())
@@ -651,7 +663,7 @@ func (a *Agent) handleTamperProtect(data json.RawMessage) {
 	// 成功更新
 	message := fmt.Sprintf("防篡改保护已更新: 新增 %d 个, 移除 %d 个, 当前保护 %d 个目录",
 		len(result.Added), len(result.Removed), len(result.Current))
-	log.Printf("✅ %s", message)
+	slog.Info(message)
 	a.sendTamperProtectResponse(true, message, result.Current, result.Added, result.Removed, "")
 }
 
@@ -675,7 +687,7 @@ func (a *Agent) sendTamperProtectResponse(success bool, message string, paths []
 		Type: protocol.MessageTypeTamperProtect,
 		Data: resp,
 	}); err != nil {
-		log.Printf("⚠️  发送防篡改保护响应失败: %v", err)
+		slog.Warn("发送防篡改保护响应失败", "error", err)
 	}
 }
 
@@ -702,9 +714,9 @@ func (a *Agent) tamperEventLoop(ctx context.Context, conn *safeConn, done chan s
 				Type: protocol.MessageTypeTamperEvent,
 				Data: eventData,
 			}); err != nil {
-				log.Printf("⚠️  发送防篡改事件失败: %v", err)
+				slog.Warn("发送防篡改事件失败", "error", err)
 			} else {
-				log.Printf("📤 已上报防篡改事件: %s - %s", event.Path, event.Operation)
+				slog.Info("已上报防篡改事件", "path", event.Path, "operation", event.Operation)
 			}
 		}
 	}
@@ -733,13 +745,13 @@ func (a *Agent) tamperAlertLoop(ctx context.Context, conn *safeConn, done chan s
 				Type: protocol.MessageTypeTamperAlert,
 				Data: alertData,
 			}); err != nil {
-				log.Printf("⚠️  发送属性篡改告警失败: %v", err)
+				slog.Warn("发送属性篡改告警失败", "error", err)
 			} else {
 				status := "未恢复"
 				if alert.Restored {
 					status = "已恢复"
 				}
-				log.Printf("📤 已上报属性篡改告警: %s - %s", alert.Path, status)
+				slog.Info("已上报属性篡改告警", "path", alert.Path, "status", status)
 			}
 		}
 	}
@@ -749,29 +761,29 @@ func (a *Agent) tamperAlertLoop(ctx context.Context, conn *safeConn, done chan s
 func (a *Agent) handleDDNSConfig(data json.RawMessage) {
 	var ddnsConfig protocol.DDNSConfigData
 	if err := json.Unmarshal(data, &ddnsConfig); err != nil {
-		log.Printf("⚠️  解析 DDNS 配置失败: %v", err)
+		slog.Warn("解析 DDNS 配置失败", "error", err)
 		return
 	}
 
 	if !ddnsConfig.Enabled {
-		log.Println("ℹ️  DDNS 已禁用，跳过 IP 检查")
+		slog.Info("DDNS 已禁用，跳过 IP 检查")
 		return
 	}
 
 	conn := a.getActiveConn()
 	manager := a.getCollectorManager()
 	if conn == nil || manager == nil {
-		log.Println("⚠️  当前连接未就绪，无法执行 DDNS IP 检查")
+		slog.Warn("当前连接未就绪，无法执行 DDNS IP 检查")
 		return
 	}
 
-	log.Println("📥 收到 DDNS 配置检查请求，开始采集 IP 地址")
+	slog.Info("收到 DDNS 配置检查请求，开始采集 IP 地址")
 
 	// 采集 IP 地址并上报
 	if err := a.collectAndSendDDNSIP(conn, manager, &ddnsConfig); err != nil {
-		log.Printf("⚠️  DDNS IP 采集失败: %v", err)
+		slog.Warn("DDNS IP 采集失败", "error", err)
 	} else {
-		log.Println("✅ DDNS IP 地址已上报")
+		slog.Info("DDNS IP 地址已上报")
 	}
 }
 
@@ -783,10 +795,10 @@ func (a *Agent) collectAndSendDDNSIP(conn *safeConn, manager *collector.Manager,
 	if config.EnableIPv4 {
 		ipv4, err := a.getIPAddress(manager, config.IPv4GetMethod, config.IPv4GetValue, false)
 		if err != nil {
-			log.Printf("⚠️  获取 IPv4 失败: %v", err)
+			slog.Warn("获取 IPv4 失败", "error", err)
 		} else {
 			ipReport.IPv4 = ipv4
-			log.Printf("✅ 获取 IPv4: %s", ipv4)
+			slog.Info("获取 IPv4", "ip", ipv4)
 		}
 	}
 
@@ -794,10 +806,10 @@ func (a *Agent) collectAndSendDDNSIP(conn *safeConn, manager *collector.Manager,
 	if config.EnableIPv6 {
 		ipv6, err := a.getIPAddress(manager, config.IPv6GetMethod, config.IPv6GetValue, true)
 		if err != nil {
-			log.Printf("⚠️  获取 IPv6 失败: %v", err)
+			slog.Warn("获取 IPv6 失败", "error", err)
 		} else {
 			ipReport.IPv6 = ipv6
-			log.Printf("✅ 获取 IPv6: %s", ipv6)
+			slog.Info("获取 IPv6", "ip", ipv6)
 		}
 	}
 
@@ -827,5 +839,115 @@ func (a *Agent) getIPAddress(manager *collector.Manager, method, value string, i
 		return manager.GetInterfaceIP(value, isIPv6)
 	default:
 		return "", fmt.Errorf("不支持的 IP 获取方式: %s", method)
+	}
+}
+
+// handleUninstall 处理服务端发送的卸载指令
+func (a *Agent) handleUninstall() {
+	slog.Info("收到服务端卸载指令，开始执行卸载...")
+
+	// 获取配置文件路径
+	cfgPath := a.cfg.Path
+	if cfgPath == "" {
+		cfgPath = config.GetDefaultConfigPath()
+	}
+
+	// 执行卸载操作
+	if err := UninstallAgent(cfgPath); err != nil {
+		slog.Error("卸载失败", "error", err)
+		return
+	}
+
+	slog.Info("探针卸载成功，即将退出...")
+
+	// 卸载成功后，触发停止信号
+	if a.cancel != nil {
+		a.cancel()
+	}
+}
+
+// handleSSHLoginConfig 处理 SSH 登录监控配置
+func (a *Agent) handleSSHLoginConfig(conn *websocket.Conn, data json.RawMessage) {
+	var config protocol.SSHLoginConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		slog.Warn("解析SSH登录监控配置失败", "error", err)
+		// 发送失败结果
+		a.sendSSHLoginConfigResult(conn, false, false, "解析配置失败", err.Error())
+		return
+	}
+
+	slog.Info("收到SSH登录监控配置", "enabled", config.Enabled, "recordFailed", config.RecordFailed)
+
+	// 应用配置
+	ctx := context.Background()
+	if err := a.sshMonitor.Start(ctx, config); err != nil {
+		slog.Warn("应用SSH登录监控配置失败", "error", err)
+		// 发送失败结果，包含详细错误信息
+		a.sendSSHLoginConfigResult(conn, false, config.Enabled, "应用配置失败", err.Error())
+		return
+	}
+
+	// 发送成功结果
+	message := "配置已成功应用"
+	if config.Enabled {
+		message = "SSH登录监控已启用"
+	} else {
+		message = "SSH登录监控已禁用"
+	}
+	a.sendSSHLoginConfigResult(conn, true, config.Enabled, message, "")
+}
+
+// sendSSHLoginConfigResult 发送 SSH 登录监控配置应用结果
+func (a *Agent) sendSSHLoginConfigResult(conn *websocket.Conn, success bool, enabled bool, message string, errorMsg string) {
+	result := protocol.SSHLoginConfigResult{
+		Success: success,
+		Enabled: enabled,
+		Message: message,
+		Error:   errorMsg,
+	}
+
+	msg := protocol.OutboundMessage{
+		Type: protocol.MessageTypeSSHLoginConfigResult,
+		Data: result,
+	}
+
+	if err := conn.WriteJSON(msg); err != nil {
+		slog.Warn("发送SSH登录监控配置应用结果失败", "error", err)
+	}
+}
+
+// sshLoginEventLoop SSH登录事件监控循环
+func (a *Agent) sshLoginEventLoop(ctx context.Context, conn *safeConn, done chan struct{}) {
+	eventCh := a.sshMonitor.GetEvents()
+
+	for {
+		select {
+		case <-done:
+			return
+		case <-ctx.Done():
+			return
+		case event := <-eventCh:
+			// 转换为 protocol 结构
+			eventData := protocol.SSHLoginEvent{
+				Username:  event.Username,
+				IP:        event.IP,
+				Port:      event.Port,
+				Timestamp: event.Timestamp,
+				Status:    event.Status,
+				Method:    event.Method,
+				TTY:       event.TTY,
+				SessionID: event.SessionID,
+			}
+
+			// 上报到服务端
+			if err := conn.WriteJSON(protocol.OutboundMessage{
+				Type: protocol.MessageTypeSSHLoginEvent,
+				Data: eventData,
+			}); err != nil {
+				slog.Warn("发送SSH登录事件失败", "error", err)
+			} else {
+				slog.Info("已上报SSH登录事件", "user", event.Username, "ip", event.IP, "status", event.Status)
+			}
+		}
 	}
 }

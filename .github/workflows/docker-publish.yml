@@ -54,6 +54,16 @@ jobs:
         run: |
           make build-release
 
+      # 验证 index.html 模板代码
+      - name: 验证 index.html 模板代码
+        run: |
+          if grep -q "{{.CustomJS}}" web/dist/index.html && grep -q "{{.CustomCSS}}" web/dist/index.html; then
+            echo "✓ 自定义模板代码已成功添加到 index.html"
+          else
+            echo "✗ 自定义模板代码未找到，重新执行 patch-html"
+            go run cmd/patch-html/main.go
+          fi
+
       # 列出编译产物
       - name: 列出编译产物
         run: |

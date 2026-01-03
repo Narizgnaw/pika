@@ -14,7 +14,7 @@
 *~
 
 # 构建产物
-bin/agents/
+# bin/agents/ 不能忽略，Agent Docker 镜像构建需要使用
 web/dist/
 web/node_modules/
 

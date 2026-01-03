@@ -60,6 +60,9 @@ type SystemConfig struct {
 	LogoBase64   string `json:"logoBase64"`   // 系统logo（base64编码）
 	ICPCode      string `json:"icpCode"`      // ICP备案号
 	DefaultView  string `json:"defaultView"`  // 默认视图 grid | list
+	CustomCSS    string `json:"customCSS"`    // 自定义 CSS
+	CustomJS     string `json:"customJS"`     // 自定义 JS
+	Version      string `json:"-"`            // 系统版本
 }
 
 // AlertConfig 全局告警配置

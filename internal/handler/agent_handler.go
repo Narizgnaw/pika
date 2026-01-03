@@ -24,27 +24,30 @@ import (
 )
 
 type AgentHandler struct {
-	logger        *zap.Logger
-	agentService  *service.AgentService
-	metricService *service.MetricService
-	monitorSvc    *service.MonitorService
-	tamperService *service.TamperService
-	ddnsService   *service.DDNSService
-	wsManager     *ws.Manager
-	upgrader      websocket.Upgrader
+	logger          *zap.Logger
+	agentService    *service.AgentService
+	metricService   *service.MetricService
+	monitorSvc      *service.MonitorService
+	tamperService   *service.TamperService
+	ddnsService     *service.DDNSService
+	sshLoginService *service.SSHLoginService
+	wsManager       *ws.Manager
+	upgrader        websocket.Upgrader
 }
 
 func NewAgentHandler(logger *zap.Logger, agentService *service.AgentService, metricService *service.MetricService,
-	monitorService *service.MonitorService, tamperService *service.TamperService, ddnsService *service.DDNSService, wsManager *ws.Manager) *AgentHandler {
+	monitorService *service.MonitorService, tamperService *service.TamperService, ddnsService *service.DDNSService,
+	sshLoginService *service.SSHLoginService, wsManager *ws.Manager) *AgentHandler {
 
 	h := &AgentHandler{
-		logger:        logger,
-		agentService:  agentService,
-		metricService: metricService,
-		monitorSvc:    monitorService,
-		tamperService: tamperService,
-		ddnsService:   ddnsService,
-		wsManager:     wsManager,
+		logger:          logger,
+		agentService:    agentService,
+		metricService:   metricService,
+		monitorSvc:      monitorService,
+		tamperService:   tamperService,
+		ddnsService:     ddnsService,
+		sshLoginService: sshLoginService,
+		wsManager:       wsManager,
 	}
 
 	// 初始化upgrader，需要在创建handler之后因为需要引用h.checkOrigin
@@ -199,6 +202,24 @@ func (h *AgentHandler) handleWebSocketMessage(ctx context.Context, agentID strin
 		}
 		return h.ddnsService.HandleIPReport(ctx, agentID, &ipReport)
 
+	case protocol.MessageTypeSSHLoginEvent:
+		// SSH 登录事件
+		var eventData protocol.SSHLoginEvent
+		if err := json.Unmarshal(data, &eventData); err != nil {
+			h.logger.Error("failed to unmarshal ssh login event", zap.Error(err))
+			return err
+		}
+		return h.sshLoginService.HandleEvent(agentID, eventData)
+
+	case protocol.MessageTypeSSHLoginConfigResult:
+		// SSH 登录监控配置应用结果
+		var resultData protocol.SSHLoginConfigResult
+		if err := json.Unmarshal(data, &resultData); err != nil {
+			h.logger.Error("failed to unmarshal ssh login config result", zap.Error(err))
+			return err
+		}
+		return h.sshLoginService.HandleConfigResult(agentID, resultData)
+
 	case protocol.MessageTypeTamperProtect:
 		// 防篡改配置响应
 		var protectResp protocol.TamperProtectResponse
@@ -288,16 +309,15 @@ func (h *AgentHandler) sendTamperConfig(conn *websocket.Conn, agentID string) er
 
 // Paging 探针分页查询
 func (h *AgentHandler) Paging(c echo.Context) error {
-	hostname := c.QueryParam("hostname")
-	ip := c.QueryParam("ip")
 	status := c.QueryParam("status")
 
 	pr := orz.GetPageRequest(c, "name")
 
 	builder := orz.NewPageBuilder(h.agentService.AgentRepo.Repository).
 		PageRequest(pr).
-		Contains("hostname", hostname).
-		Contains("ip", ip)
+		Contains("name", c.QueryParam("name")).
+		Contains("hostname", c.QueryParam("hostname")).
+		Contains("ip", c.QueryParam("ip"))
 
 	// 处理状态筛选
 	if status == "online" {
@@ -713,8 +733,29 @@ func (h *AgentHandler) Delete(c echo.Context) error {
 		return err
 	}
 
-	// 如果探针在线，先断开连接
+	// 如果探针在线，先发送卸载指令，然后断开连接
 	if client, exists := h.wsManager.GetClient(agentID); exists {
+		// 构建卸载消息
+		uninstallMsg, err := json.Marshal(protocol.OutboundMessage{
+			Type: protocol.MessageTypeUninstall,
+			Data: struct{}{}, // 空数据，卸载指令不需要额外参数
+		})
+		if err == nil {
+			// 发送卸载指令（忽略发送错误，继续删除流程）
+			if err := h.wsManager.SendToClient(agentID, uninstallMsg); err != nil {
+				h.logger.Warn("发送卸载指令失败",
+					zap.String("agentID", agentID),
+					zap.Error(err))
+			} else {
+				h.logger.Info("已向探针发送卸载指令",
+					zap.String("agentID", agentID),
+					zap.String("name", agent.Name))
+				// 等待一小段时间让探针处理卸载消息
+				time.Sleep(500 * time.Millisecond)
+			}
+		}
+
+		// 断开连接
 		client.Conn.Close()
 	}
 
@@ -854,10 +895,10 @@ download_agent() {
 
     echo_info "正在下载探针..."
 
-    if command -v wget &> /dev/null; then
-        wget -q --show-progress "$download_url" -O "$temp_file"
-    elif command -v curl &> /dev/null; then
+    if command -v curl &> /dev/null; then
         curl -# -L "$download_url" -o "$temp_file"
+    elif command -v wget &> /dev/null; then
+        wget -q "$download_url" -O "$temp_file"
     else
         echo_error "未找到 wget 或 curl 命令，请先安装其中之一"
         exit 1
