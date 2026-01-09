@@ -159,9 +159,7 @@ func (h *AgentHandler) UpdateInfo(c echo.Context) error {
 		return err
 	}
 
-	return orz.Ok(c, orz.Map{
-		"message": "更新成功",
-	})
+	return orz.Ok(c, orz.Map{})
 }
 
 // GetStatistics 获取探针统计数据
@@ -225,9 +223,7 @@ func (h *AgentHandler) Delete(c echo.Context) error {
 		zap.String("agentID", agentID),
 		zap.String("name", agent.Name))
 
-	return orz.Ok(c, orz.Map{
-		"message": "删除成功",
-	})
+	return orz.Ok(c, orz.Map{})
 }
 
 // BatchUpdateTags 批量更新探针标签
@@ -285,9 +281,7 @@ func (h *AgentHandler) UpdateTrafficConfig(c echo.Context) error {
 		return err
 	}
 
-	return orz.Ok(c, orz.Map{
-		"message": "流量配置更新成功",
-	})
+	return orz.Ok(c, orz.Map{})
 }
 
 // GetTrafficStats 查询流量统计(管理员接口)
@@ -312,7 +306,5 @@ func (h *AgentHandler) ResetAgentTraffic(c echo.Context) error {
 		return err
 	}
 
-	return orz.Ok(c, orz.Map{
-		"message": "流量已重置",
-	})
+	return orz.Ok(c, orz.Map{})
 }

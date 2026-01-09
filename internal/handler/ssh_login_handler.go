@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/dushixiang/pika/internal/service"
+	"github.com/go-orz/orz"
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
 )
@@ -29,7 +30,7 @@ func (h *SSHLoginHandler) GetConfig(c echo.Context) error {
 	agentID := c.Param("id")
 	if agentID == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "探针ID不能为空",
+			"message": "探针ID不能为空",
 		})
 	}
 
@@ -37,7 +38,7 @@ func (h *SSHLoginHandler) GetConfig(c echo.Context) error {
 	if err != nil {
 		h.logger.Error("获取SSH登录监控配置失败", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "获取配置失败",
+			"message": "获取配置失败",
 		})
 	}
 
@@ -58,7 +59,7 @@ func (h *SSHLoginHandler) UpdateConfig(c echo.Context) error {
 	agentID := c.Param("id")
 	if agentID == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "探针ID不能为空",
+			"message": "探针ID不能为空",
 		})
 	}
 
@@ -68,7 +69,7 @@ func (h *SSHLoginHandler) UpdateConfig(c echo.Context) error {
 
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "请求参数错误",
+			"message": "请求参数错误",
 		})
 	}
 
@@ -76,7 +77,7 @@ func (h *SSHLoginHandler) UpdateConfig(c echo.Context) error {
 	if err != nil {
 		h.logger.Error("更新SSH登录监控配置失败", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "更新配置失败",
+			"message": "更新配置失败",
 		})
 	}
 
@@ -101,7 +102,7 @@ func (h *SSHLoginHandler) ListEvents(c echo.Context) error {
 	agentID := c.Param("id")
 	if agentID == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "探针ID不能为空",
+			"message": "探针ID不能为空",
 		})
 	}
 
@@ -138,7 +139,7 @@ func (h *SSHLoginHandler) ListEvents(c echo.Context) error {
 	if err != nil {
 		h.logger.Error("查询SSH登录事件失败", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "查询失败",
+			"message": "查询失败",
 		})
 	}
 
@@ -156,7 +157,7 @@ func (h *SSHLoginHandler) GetEvent(c echo.Context) error {
 	eventID := c.Param("id")
 	if eventID == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "事件ID不能为空",
+			"message": "事件ID不能为空",
 		})
 	}
 
@@ -164,13 +165,13 @@ func (h *SSHLoginHandler) GetEvent(c echo.Context) error {
 	if err != nil {
 		h.logger.Error("获取SSH登录事件失败", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "获取事件失败",
+			"message": "获取事件失败",
 		})
 	}
 
 	if event == nil {
 		return c.JSON(http.StatusNotFound, map[string]string{
-			"error": "事件不存在",
+			"message": "事件不存在",
 		})
 	}
 
@@ -183,18 +184,16 @@ func (h *SSHLoginHandler) DeleteEvents(c echo.Context) error {
 	agentID := c.Param("id")
 	if agentID == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "探针ID不能为空",
+			"message": "探针ID不能为空",
 		})
 	}
 
 	if err := h.service.DeleteEventsByAgentID(agentID); err != nil {
 		h.logger.Error("删除SSH登录事件失败", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "删除失败",
+			"message": "删除失败",
 		})
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{
-		"message": "删除成功",
-	})
+	return c.JSON(http.StatusOK, orz.Map{})
 }

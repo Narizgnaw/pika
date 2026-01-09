@@ -7,6 +7,7 @@ import (
 
 	"github.com/dushixiang/pika/internal/models"
 	"github.com/dushixiang/pika/internal/service"
+	"github.com/go-orz/orz"
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
 )
@@ -77,9 +78,7 @@ func (h *PropertyHandler) SetProperty(c echo.Context) error {
 		})
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{
-		"message": "设置成功",
-	})
+	return c.JSON(http.StatusOK, orz.Map{})
 }
 
 // GetLogo 获取系统 Logo（公开访问，返回图片文件流）

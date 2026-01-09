@@ -196,9 +196,7 @@ func (h *DDNSHandler) Update(c echo.Context) error {
 		return err
 	}
 
-	return orz.Ok(c, orz.Map{
-		"message": "DDNS 配置更新成功",
-	})
+	return orz.Ok(c, orz.Map{})
 }
 
 // Delete 删除 DDNS 配置
@@ -211,9 +209,7 @@ func (h *DDNSHandler) Delete(c echo.Context) error {
 		return err
 	}
 
-	return orz.Ok(c, orz.Map{
-		"message": "DDNS 配置删除成功",
-	})
+	return orz.Ok(c, orz.Map{})
 }
 
 // Enable 启用 DDNS 配置
@@ -226,9 +222,7 @@ func (h *DDNSHandler) Enable(c echo.Context) error {
 		return err
 	}
 
-	return orz.Ok(c, orz.Map{
-		"message": "DDNS 配置启用成功",
-	})
+	return orz.Ok(c, orz.Map{})
 }
 
 // Disable 禁用 DDNS 配置
@@ -241,9 +235,7 @@ func (h *DDNSHandler) Disable(c echo.Context) error {
 		return err
 	}
 
-	return orz.Ok(c, orz.Map{
-		"message": "DDNS 配置禁用成功",
-	})
+	return orz.Ok(c, orz.Map{})
 }
 
 // GetRecords 获取 DDNS 更新记录
@@ -274,7 +266,5 @@ func (h *DDNSHandler) TriggerUpdate(c echo.Context) error {
 		return err
 	}
 
-	return orz.Ok(c, orz.Map{
-		"message": "DDNS 更新触发成功，探针将在几秒内上报 IP 并更新记录",
-	})
+	return orz.Ok(c, orz.Map{})
 }

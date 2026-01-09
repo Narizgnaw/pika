@@ -129,9 +129,7 @@ func (r AccountHandler) Logout(c echo.Context) error {
 		return err
 	}
 
-	return orz.Ok(c, orz.Map{
-		"message": "登出成功",
-	})
+	return orz.Ok(c, orz.Map{})
 }
 
 // ValidateToken 验证 token（供中间件使用）

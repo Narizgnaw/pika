@@ -49,11 +49,9 @@ func (h *AlertHandler) ClearAlertRecords(c echo.Context) error {
 	if err := h.alertService.Clear(c.Request().Context()); err != nil {
 		h.logger.Error("清空告警记录失败", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "清空告警记录失败",
+			"message": "清空告警记录失败",
 		})
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{
-		"message": "清空成功",
-	})
+	return c.JSON(http.StatusOK, echo.Map{})
 }

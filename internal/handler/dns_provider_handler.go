@@ -6,6 +6,7 @@ import (
 
 	"github.com/dushixiang/pika/internal/models"
 	"github.com/dushixiang/pika/internal/service"
+	"github.com/go-orz/orz"
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
 )
@@ -126,7 +127,7 @@ func (h *DNSProviderHandler) Upsert(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "保存配置失败")
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{"message": "保存成功"})
+	return c.JSON(http.StatusOK, orz.Map{})
 }
 
 // Delete 删除 DNS Provider 配置
@@ -143,7 +144,7 @@ func (h *DNSProviderHandler) Delete(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "删除配置失败")
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{"message": "删除成功"})
+	return c.JSON(http.StatusOK, orz.Map{})
 }
 
 // validateProviderConfig 验证不同服务商的配置字段
