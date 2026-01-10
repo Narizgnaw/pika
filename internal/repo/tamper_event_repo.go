@@ -18,7 +18,7 @@ func NewTamperEventRepo(db *gorm.DB) *TamperEventRepo {
 	}
 }
 
-// DeleteOldEvents 删除旧的事件记录（保留最近N天）
-func (r *TamperEventRepo) DeleteOldEvents(ctx context.Context, beforeTimestamp int64) error {
-	return r.GetDB(ctx).Where("timestamp < ?", beforeTimestamp).Delete(&models.TamperEvent{}).Error
+// DeleteEventsByAgentID 删除探针的所有防篡改事件
+func (r *TamperEventRepo) DeleteEventsByAgentID(ctx context.Context, agentID string) error {
+	return r.GetDB(ctx).Where("agent_id = ?", agentID).Delete(&models.TamperEvent{}).Error
 }

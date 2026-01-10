@@ -19,6 +19,7 @@ import {NetworkConnectionChart} from '@portal/components/server/NetworkConnectio
 import {TemperatureChart} from '@portal/components/server/TemperatureChart.tsx';
 import {useAgentQuery, useLatestMetricsQuery} from '@portal/hooks/server.ts';
 import {SERVER_TIME_RANGE_OPTIONS} from '@portal/constants/time.ts';
+import LittleStatCard from '@portal/components/LittleStatCard.tsx';
 
 /**
  * 服务器详情页面
@@ -43,6 +44,9 @@ const ServerDetail = () => {
 
     const agent = agentResponse?.data;
     const latestMetrics = latestMetricsResponse?.data || null;
+    const formatLoad = (value?: number) => (
+        typeof value === 'number' && Number.isFinite(value) ? value.toFixed(2) : '-'
+    );
 
     if (isLoading) {
         return <LoadingSpinner/>;
@@ -66,6 +70,18 @@ const ServerDetail = () => {
                 <main className="flex-1 py-6 sm:py-8 lg:py-10 space-y-6 sm:space-y-8 lg:space-y-10">
                     {/* 系统信息 */}
                     <SystemInfoSection agent={agent} latestMetrics={latestMetrics}/>
+
+                    {/* 系统负载 */}
+                    <Card
+                        title="系统负载"
+                        description="最近 1/5/15 分钟平均负载"
+                    >
+                        <div className="grid gap-3 sm:gap-4 md:grid-cols-3">
+                            <LittleStatCard label="1 MIN" value={formatLoad(latestMetrics?.host?.load1)}/>
+                            <LittleStatCard label="5 MIN" value={formatLoad(latestMetrics?.host?.load5)}/>
+                            <LittleStatCard label="15 MIN" value={formatLoad(latestMetrics?.host?.load15)}/>
+                        </div>
+                    </Card>
 
                     {/* 历史趋势图表 */}
                     <Card

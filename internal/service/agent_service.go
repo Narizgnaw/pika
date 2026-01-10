@@ -20,20 +20,24 @@ import (
 type AgentService struct {
 	logger *zap.Logger
 	*orz.Service
-	AgentRepo     *repo.AgentRepo
-	apiKeyService *ApiKeyService
-	metricService *MetricService
-	geoipService  *GeoIPService
+	AgentRepo         *repo.AgentRepo
+	TamperEventRepo   *repo.TamperEventRepo
+	SSHLoginEventRepo *repo.SSHLoginEventRepo
+	apiKeyService     *ApiKeyService
+	metricService     *MetricService
+	geoipService      *GeoIPService
 }
 
 func NewAgentService(logger *zap.Logger, db *gorm.DB, apiKeyService *ApiKeyService, metricService *MetricService, geoipService *GeoIPService) *AgentService {
 	return &AgentService{
-		logger:        logger,
-		Service:       orz.NewService(db),
-		AgentRepo:     repo.NewAgentRepo(db),
-		apiKeyService: apiKeyService,
-		metricService: metricService,
-		geoipService:  geoipService,
+		logger:            logger,
+		Service:           orz.NewService(db),
+		AgentRepo:         repo.NewAgentRepo(db),
+		TamperEventRepo:   repo.NewTamperEventRepo(db),
+		SSHLoginEventRepo: repo.NewSSHLoginEventRepo(db),
+		apiKeyService:     apiKeyService,
+		metricService:     metricService,
+		geoipService:      geoipService,
 	}
 }
 
@@ -333,15 +337,21 @@ func (s *AgentService) GetStatistics(ctx context.Context) (map[string]interface{
 func (s *AgentService) DeleteAgent(ctx context.Context, agentID string) error {
 	// 在事务中执行所有删除操作
 	return s.Transaction(ctx, func(ctx context.Context) error {
-		// 1. 删除探针的所有指标数据
-		if err := s.metricService.DeleteAgentMetrics(ctx, agentID); err != nil {
-			s.logger.Error("删除探针指标数据失败", zap.String("agentId", agentID), zap.Error(err))
+		// 1. 删除探针的审计结果
+		if err := s.AgentRepo.DeleteAuditResults(ctx, agentID); err != nil {
+			s.logger.Error("删除探针审计结果失败", zap.String("agentId", agentID), zap.Error(err))
 			return err
 		}
 
-		// 2. 删除探针的审计结果
-		if err := s.AgentRepo.DeleteAuditResults(ctx, agentID); err != nil {
-			s.logger.Error("删除探针审计结果失败", zap.String("agentId", agentID), zap.Error(err))
+		// 2. 删除探针的目录保护事件数据
+		if err := s.TamperEventRepo.DeleteEventsByAgentID(ctx, agentID); err != nil {
+			s.logger.Error("删除探针目录保护事件失败", zap.String("agentId", agentID), zap.Error(err))
+			return err
+		}
+
+		// 3. 删除探针的SSH登录事件数据
+		if err := s.SSHLoginEventRepo.DeleteEventsByAgentID(ctx, agentID); err != nil {
+			s.logger.Error("删除探针SSH登录事件失败", zap.String("agentId", agentID), zap.Error(err))
 			return err
 		}
 

@@ -203,13 +203,6 @@ func (s *TamperService) CreateEvent(ctx context.Context, agentID string, eventDa
 	return s.TamperEventRepo.Create(ctx, event)
 }
 
-// CleanupOldRecords 清理旧记录（保留最近30天）
-func (s *TamperService) CleanupOldRecords(ctx context.Context) error {
-	// 30天前的时间戳
-	threshold := time.Now().AddDate(0, 0, -30).UnixMilli()
-	return s.TamperEventRepo.DeleteOldEvents(ctx, threshold)
-}
-
 func (s *TamperService) HandleConfigResult(ctx context.Context, agentID string, resp protocol.TamperProtectResponse) error {
 	// 获取现有配置
 	config, err := s.GetConfigByAgentID(ctx, agentID)

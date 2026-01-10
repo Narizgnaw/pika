@@ -127,15 +127,6 @@ func (s *SSHLoginService) HandleEvent(ctx context.Context, agentID string, event
 		return nil
 	}
 
-	// 去重检查（避免 Agent 重启时重复上报）
-	existing, err := s.SSHLoginEventRepo.FindEventByTimestamp(ctx, agentID, eventData.Timestamp, 5000) // 5秒容差
-	if err != nil {
-		s.logger.Warn("查询事件去重失败", zap.Error(err))
-	} else if existing != nil {
-		s.logger.Debug("检测到重复事件，跳过", zap.String("agentId", agentID), zap.Int64("timestamp", eventData.Timestamp))
-		return nil
-	}
-
 	// 保存事件到数据库
 	event := &models.SSHLoginEvent{
 		AgentID:   agentID,
@@ -169,22 +160,4 @@ func (s *SSHLoginService) HandleEvent(ctx context.Context, agentID string, event
 // DeleteEventsByAgentID 删除探针的所有事件
 func (s *SSHLoginService) DeleteEventsByAgentID(ctx context.Context, agentID string) error {
 	return s.SSHLoginEventRepo.DeleteEventsByAgentID(ctx, agentID)
-}
-
-// CleanupOldEvents 清理旧事件（定期任务）
-func (s *SSHLoginService) CleanupOldEvents(ctx context.Context, days int) error {
-	if days < 1 {
-		days = 90 // 默认保留90天
-	}
-
-	timestamp := int64(days) * 24 * 60 * 60 * 1000
-	cutoff := time.Now().UnixMilli() - timestamp
-
-	if err := s.SSHLoginEventRepo.DeleteOldEvents(ctx, cutoff); err != nil {
-		s.logger.Error("清理SSH登录事件失败", zap.Error(err), zap.Int("days", days))
-		return err
-	}
-
-	s.logger.Info("成功清理SSH登录事件", zap.Int("days", days))
-	return nil
 }
