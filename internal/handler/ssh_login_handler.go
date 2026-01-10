@@ -75,7 +75,7 @@ func (h *SSHLoginHandler) ListEvents(c echo.Context) error {
 	agentID := c.Param("id")
 
 	// 获取分页参数
-	pageReq := orz.GetPageRequest(c)
+	pageReq := orz.GetPageRequest(c, "createdAt")
 	builder := orz.NewPageBuilder(h.service.SSHLoginEventRepo.Repository).
 		PageRequest(pageReq).
 		Equal("agentId", agentID).

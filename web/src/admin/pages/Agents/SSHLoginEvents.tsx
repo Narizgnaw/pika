@@ -152,6 +152,8 @@ const SSHLoginEvents: React.FC<SSHLoginEventsProps> = ({agentId}) => {
                         username: params.username,
                         ip: params.ip,
                         status: params.status,
+                        sortField: 'createdAt',
+                        sortOrder: 'descend',
                     });
                     return {
                         data: response.items || [],
@@ -172,7 +174,6 @@ const SSHLoginEvents: React.FC<SSHLoginEventsProps> = ({agentId}) => {
                 labelWidth: 'auto',
             }}
             pagination={{
-                pageSize: 20,
                 showSizeChanger: true,
                 showTotal: (total) => `共 ${total} 条`,
             }}

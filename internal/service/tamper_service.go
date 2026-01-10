@@ -282,3 +282,7 @@ func (s *TamperService) HandleConfigResult(ctx context.Context, agentID string, 
 	// 更新探针配置
 	return s.agentRepo.UpdateById(ctx, &agentForUpdate)
 }
+
+func (s *TamperService) DeleteEventsByAgentID(ctx context.Context, id string) error {
+	return s.TamperEventRepo.DeleteEventsByAgentID(ctx, id)
+}

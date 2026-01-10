@@ -258,9 +258,10 @@ func setupApi(app *orz.App, components *AppComponents) {
 		adminApi.GET("/agents/:id/audit/results", components.AgentHandler.ListAuditResults)
 
 		// 防篡改管理（管理员功能）
-		adminApi.GET("/agents/:id/tamper/config", components.TamperHandler.GetTamperConfig)
-		adminApi.PUT("/agents/:id/tamper/config", components.TamperHandler.UpdateTamperConfig)
-		adminApi.GET("/agents/:id/tamper/events", components.TamperHandler.GetTamperEvents)
+		adminApi.GET("/agents/:id/tamper/config", components.TamperHandler.GetConfig)
+		adminApi.PUT("/agents/:id/tamper/config", components.TamperHandler.UpdateConfig)
+		adminApi.GET("/agents/:id/tamper/events", components.TamperHandler.ListEvents)
+		adminApi.DELETE("/agents/:id/tamper/events", components.TamperHandler.DeleteEvents)
 
 		// SSH 登录监控管理（管理员功能）
 		adminApi.GET("/agents/:id/ssh-login/config", components.SSHLoginHandler.GetConfig)

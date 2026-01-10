@@ -56,21 +56,8 @@ export const updateTamperConfig = (agentId: string, enabled: boolean, paths: str
 };
 
 // 获取防篡改事件
-export const getTamperEvents = (agentId: string, params?: {
-    pageIndex?: number;
-    pageSize?: number;
-    path?: string;
-    operation?: string;
-    details?: string;
-}) => {
-    const queryParams = {
-        pageIndex: params?.pageIndex || 1,
-        pageSize: params?.pageSize || 20,
-        path: params?.path,
-        operation: params?.operation,
-        details: params?.details,
-    };
-    const paramStr = qs.stringify(queryParams, { skipNulls: true });
+export const getTamperEvents = (agentId: string, params?: any) => {
+    const paramStr = qs.stringify(params);
     return request.get<PagedTamperEvents>(
         `/admin/agents/${agentId}/tamper/events?${paramStr}`,
     );

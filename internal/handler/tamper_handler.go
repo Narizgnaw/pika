@@ -22,9 +22,9 @@ func NewTamperHandler(logger *zap.Logger, tamperService *service.TamperService) 
 	}
 }
 
-// UpdateTamperConfig 更新探针的防篡改配置
+// UpdateConfig 更新探针的防篡改配置
 // POST /api/agents/:id/tamper/config
-func (h *TamperHandler) UpdateTamperConfig(c echo.Context) error {
+func (h *TamperHandler) UpdateConfig(c echo.Context) error {
 	agentID := c.Param("id")
 
 	var req struct {
@@ -47,9 +47,9 @@ func (h *TamperHandler) UpdateTamperConfig(c echo.Context) error {
 	return c.JSON(http.StatusOK, orz.Map{})
 }
 
-// GetTamperConfig 获取探针的防篡改配置
+// GetConfig 获取探针的防篡改配置
 // GET /api/agents/:id/tamper/config
-func (h *TamperHandler) GetTamperConfig(c echo.Context) error {
+func (h *TamperHandler) GetConfig(c echo.Context) error {
 	agentID := c.Param("id")
 
 	config, err := h.tamperService.GetConfigByAgentID(c.Request().Context(), agentID)
@@ -63,13 +63,13 @@ func (h *TamperHandler) GetTamperConfig(c echo.Context) error {
 	return c.JSON(http.StatusOK, config)
 }
 
-// GetTamperEvents 获取探针的防篡改事件
+// ListEvents 获取探针的防篡改事件
 // GET /api/agents/:id/tamper/events
-func (h *TamperHandler) GetTamperEvents(c echo.Context) error {
+func (h *TamperHandler) ListEvents(c echo.Context) error {
 	agentID := c.Param("id")
 
 	// 获取分页参数
-	pageReq := orz.GetPageRequest(c)
+	pageReq := orz.GetPageRequest(c, "createdAt")
 	builder := orz.NewPageBuilder(h.tamperService.TamperEventRepo.Repository).
 		PageRequest(pageReq).
 		Equal("agentId", agentID).
@@ -84,4 +84,16 @@ func (h *TamperHandler) GetTamperEvents(c echo.Context) error {
 	}
 
 	return orz.Ok(c, page)
+}
+
+func (h *TamperHandler) DeleteEvents(c echo.Context) error {
+	agentID := c.Param("id")
+	err := h.tamperService.DeleteEventsByAgentID(c.Request().Context(), agentID)
+	if err != nil {
+		h.logger.Error("删除防篡改事件失败", zap.Error(err), zap.String("agentId", agentID))
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"message": "删除事件失败",
+		})
+	}
+	return c.JSON(http.StatusOK, orz.Map{})
 }

@@ -123,6 +123,8 @@ const TamperProtectionEvents: React.FC<TamperProtectionEventsProps> = ({agentId}
                         path: params.path,
                         operation: params.operation,
                         details: params.details,
+                        sortField: 'createdAt',
+                        sortOrder: 'descend',
                     });
                     return {
                         data: response.data.items || [],
@@ -143,7 +145,6 @@ const TamperProtectionEvents: React.FC<TamperProtectionEventsProps> = ({agentId}
                 labelWidth: 'auto',
             }}
             pagination={{
-                pageSize: 20,
                 showSizeChanger: true,
                 showTotal: (total) => `共 ${total} 条`,
             }}
