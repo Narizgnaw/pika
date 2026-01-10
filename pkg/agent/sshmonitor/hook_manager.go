@@ -3,16 +3,18 @@ package sshmonitor
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
 const (
 	PAMConfigFile   = "/etc/pam.d/sshd"
-	PAMConfigLine   = "session optional pam_exec.so /usr/local/bin/pika_ssh_hook.sh"
-	HookScriptPath  = "/usr/local/bin/pika_ssh_hook.sh"
+	HookBinaryPath  = "/usr/local/bin/pika-agent"
+	HookCommand     = "ssh-login-hook"
 	SSHDConfigFile  = "/etc/ssh/sshd_config"
 	UsePAMDirective = "UsePAM yes"
 )
@@ -25,11 +27,19 @@ func NewHookManager() *HookManager {
 	return &HookManager{}
 }
 
+func pamConfigLine() string {
+	return fmt.Sprintf("session optional pam_exec.so %s %s", HookBinaryPath, HookCommand)
+}
+
+func legacyPamConfigLine() string {
+	return "session optional pam_exec.so /usr/local/bin/pika_ssh_hook.sh"
+}
+
 // Install 安装 PAM Hook
 func (h *HookManager) Install() error {
 	// 检查是否为 root 用户
 	if os.Geteuid() != 0 {
-		return fmt.Errorf("安装 PAM Hook 需要 root 权限")
+		return fmt.Errorf("%w: 安装 PAM Hook 需要 root 权限", os.ErrPermission)
 	}
 
 	// 检查是否已安装（幂等性）
@@ -43,15 +53,15 @@ func (h *HookManager) Install() error {
 		return fmt.Errorf("配置 SSH UsePAM 失败: %w", err)
 	}
 
-	// 部署 Hook 脚本
-	if err := h.deployScript(); err != nil {
-		return fmt.Errorf("部署脚本失败: %w", err)
+	// 安装 Hook 可执行文件（软链）
+	if err := h.ensureHookBinary(); err != nil {
+		return fmt.Errorf("安装 Hook 可执行文件失败: %w", err)
 	}
 
 	// 修改 PAM 配置
 	if err := h.modifyPAMConfig(true); err != nil {
-		// 回滚脚本部署
-		os.Remove(HookScriptPath)
+		// 回滚软链
+		h.removeHookBinary()
 		return fmt.Errorf("修改 PAM 配置失败: %w", err)
 	}
 
@@ -66,10 +76,8 @@ func (h *HookManager) Uninstall() error {
 		slog.Warn("移除 PAM 配置失败", "error", err)
 	}
 
-	// 删除脚本文件
-	if err := os.Remove(HookScriptPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("删除脚本失败: %w", err)
-	}
+	// 删除软链
+	h.removeHookBinary()
 
 	slog.Info("PAM Hook 卸载成功")
 	return nil
@@ -87,7 +95,7 @@ func (h *HookManager) isInstalled() bool {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line == PAMConfigLine {
+		if line == pamConfigLine() {
 			return true
 		}
 	}
@@ -95,58 +103,66 @@ func (h *HookManager) isInstalled() bool {
 	return false
 }
 
-// deployScript 部署 Hook 脚本
-func (h *HookManager) deployScript() error {
-	// 脚本内容（嵌入式）
-	scriptContent := `#!/bin/bash
-# Pika SSH Login Hook
-# 由 Pika Agent 自动安装
-
-LOG_FILE="/var/log/pika/ssh_login.log"
-LOG_DIR="/var/log/pika"
-
-# 确保日志目录存在
-mkdir -p "$LOG_DIR"
-
-# 获取登录信息
-TIMESTAMP=$(date +%s)000  # 毫秒时间戳
-USERNAME="$PAM_USER"
-IP="${PAM_RHOST:-localhost}"
-TTY="${PAM_TTY:-unknown}"
-SESSION_ID="$$"
-
-# 判断登录状态（通过 PAM_TYPE）
-if [ "$PAM_TYPE" = "open_session" ]; then
-    STATUS="success"
-else
-    STATUS="unknown"
-fi
-
-# 尝试获取端口号（从 SSH 连接信息）
-PORT=$(echo "$SSH_CONNECTION" | awk '{print $2}')
-
-# 尝试获取认证方式（简化处理）
-METHOD="password"
-
-# 构建 JSON 日志
-JSON_LOG=$(cat <<EOF
-{"timestamp":$TIMESTAMP,"username":"$USERNAME","ip":"$IP","port":"$PORT","status":"$STATUS","method":"$METHOD","tty":"$TTY","sessionId":"$SESSION_ID"}
-EOF
-)
-
-# 追加到日志文件
-echo "$JSON_LOG" >> "$LOG_FILE"
-
-exit 0
-`
-
-	// 写入脚本文件
-	if err := os.WriteFile(HookScriptPath, []byte(scriptContent), 0755); err != nil {
+// ensureHookBinary 确保 Hook 可执行文件存在
+func (h *HookManager) ensureHookBinary() error {
+	execPath, err := os.Executable()
+	if err != nil {
 		return err
 	}
 
-	slog.Info("PAM Hook 脚本部署成功", "path", HookScriptPath)
-	return nil
+	if execPath == HookBinaryPath {
+		return nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(HookBinaryPath), 0755); err != nil {
+		return err
+	}
+
+	if info, err := os.Lstat(HookBinaryPath); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			if target, err := os.Readlink(HookBinaryPath); err == nil && target == execPath {
+				return nil
+			}
+		}
+	}
+
+	_ = os.Remove(HookBinaryPath)
+
+	if err := os.Symlink(execPath, HookBinaryPath); err == nil {
+		return nil
+	}
+
+	return copyFile(execPath, HookBinaryPath, 0755)
+}
+
+func (h *HookManager) removeHookBinary() {
+	info, err := os.Lstat(HookBinaryPath)
+	if err != nil {
+		return
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		_ = os.Remove(HookBinaryPath)
+	}
+}
+
+func copyFile(src, dst string, perm os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+
+	return os.Chmod(dst, perm)
 }
 
 // modifyPAMConfig 修改 PAM 配置
@@ -176,8 +192,13 @@ func (h *HookManager) modifyPAMConfig(add bool) error {
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 
+		// 清理旧版本配置行，避免重复
+		if trimmed == legacyPamConfigLine() {
+			continue
+		}
+
 		// 跳过我们的配置行（移除模式）或检测是否已存在（添加模式）
-		if trimmed == PAMConfigLine {
+		if trimmed == pamConfigLine() {
 			found = true
 			if add {
 				newLines = append(newLines, line) // 保留
@@ -191,7 +212,7 @@ func (h *HookManager) modifyPAMConfig(add bool) error {
 
 	// 如果是添加模式且未找到，则添加到文件末尾
 	if add && !found {
-		newLines = append(newLines, PAMConfigLine)
+		newLines = append(newLines, pamConfigLine())
 	}
 
 	// 备份原配置
@@ -280,9 +301,7 @@ func (h *HookManager) ensureUsePAM() error {
 	}
 
 	// 如果找到了 UsePAM 但未启用,或者没找到,都需要添加配置
-	if !usePAMEnabled {
-		newLines = append(newLines, UsePAMDirective)
-	}
+	newLines = append(newLines, UsePAMDirective)
 
 	// 备份原配置
 	backupPath := SSHDConfigFile + ".bak"

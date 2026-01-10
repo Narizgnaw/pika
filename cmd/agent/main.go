@@ -11,6 +11,7 @@ import (
 
 	"github.com/dushixiang/pika/pkg/agent/config"
 	"github.com/dushixiang/pika/pkg/agent/service"
+	"github.com/dushixiang/pika/pkg/agent/sshmonitor"
 	"github.com/dushixiang/pika/pkg/agent/updater"
 	"github.com/dushixiang/pika/pkg/agent/utils"
 	"github.com/spf13/cobra"
@@ -147,6 +148,15 @@ var infoCmd = &cobra.Command{
 	Run:   showInfo,
 }
 
+var sshLoginHookCmd = &cobra.Command{
+	Use:    "ssh-login-hook",
+	Short:  "SSH登录监控钩子（PAM 调用）",
+	Hidden: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		_ = sshmonitor.SendEventFromEnv()
+	},
+}
+
 var (
 	serverEndpoint string
 	serverAPIKey   string
@@ -176,6 +186,7 @@ func init() {
 	rootCmd.AddCommand(restartCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(updateCmd)
+	rootCmd.AddCommand(sshLoginHookCmd)
 
 	// 配置命令
 	configCmd.AddCommand(configInitCmd)

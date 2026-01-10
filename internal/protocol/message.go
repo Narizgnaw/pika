@@ -684,8 +684,7 @@ type LoginStatistics struct {
 
 // SSHLoginConfig SSH登录监控配置
 type SSHLoginConfig struct {
-	Enabled      bool `json:"enabled"`      // 是否启用监控
-	RecordFailed bool `json:"recordFailed"` // 是否记录失败登录
+	Enabled bool `json:"enabled"` // 是否启用监控
 }
 
 // SSHLoginConfigResult SSH登录监控配置应用结果（Agent 反馈）

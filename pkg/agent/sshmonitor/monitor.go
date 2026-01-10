@@ -2,44 +2,42 @@ package sshmonitor
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"runtime"
 	"sync"
 	"time"
 
 	"github.com/dushixiang/pika/internal/protocol"
-	"github.com/fsnotify/fsnotify"
 )
 
 const (
-	DefaultLogFile = "/var/log/pika/ssh_login.log"
-	DefaultLogDir  = "/var/log/pika"
+	DefaultSocketDir  = "/run/pika"
+	DefaultSocketPath = "/run/pika/ssh_login.sock"
 )
 
 // Monitor SSH登录监控器
 type Monitor struct {
 	mu          sync.RWMutex
 	enabled     bool
-	logFile     string
-	watcher     *fsnotify.Watcher
+	socketPath  string
+	listener    *net.UnixConn
 	ctx         context.Context
 	cancel      context.CancelFunc
 	eventCh     chan SSHLoginEvent
-	parser      *Parser
 	hookManager *HookManager
-	watcherOnce sync.Once
-	lastOffset  int64 // 记录上次读取的位置，避免重复读取
 }
 
 // NewMonitor 创建监控器
 func NewMonitor() *Monitor {
 	return &Monitor{
 		enabled:     false,
-		logFile:     DefaultLogFile,
+		socketPath:  DefaultSocketPath,
 		eventCh:     make(chan SSHLoginEvent, 100),
-		parser:      NewParser(),
 		hookManager: NewHookManager(),
 	}
 }
@@ -56,7 +54,7 @@ func (m *Monitor) Start(ctx context.Context, config protocol.SSHLoginConfig) err
 
 	// 如果已启动，先停止
 	if m.enabled {
-		m.stopInternal()
+		_ = m.stopInternal()
 	}
 
 	if !config.Enabled {
@@ -64,20 +62,10 @@ func (m *Monitor) Start(ctx context.Context, config protocol.SSHLoginConfig) err
 		return nil
 	}
 
-	// 确保日志目录存在
-	if err := os.MkdirAll(DefaultLogDir, 0755); err != nil {
-		return fmt.Errorf("创建日志目录失败: %w", err)
+	if err := m.initSocket(ctx); err != nil {
+		return err
 	}
-
-	// 确保日志文件存在
-	if _, err := os.Stat(m.logFile); os.IsNotExist(err) {
-		f, err := os.Create(m.logFile)
-		if err != nil {
-			return fmt.Errorf("创建日志文件失败: %w", err)
-		}
-		f.Close()
-		os.Chmod(m.logFile, 0644)
-	}
+	m.enabled = true
 
 	// 安装 PAM Hook
 	if err := m.hookManager.Install(); err != nil {
@@ -87,22 +75,12 @@ func (m *Monitor) Start(ctx context.Context, config protocol.SSHLoginConfig) err
 			// 不返回错误，继续监控（假设已手动安装）
 		} else {
 			slog.Warn("安装 PAM Hook 失败", "error", err)
+			_ = m.stopInternal()
 			return err
 		}
 	}
 
-	// 初始化 watcher
-	if err := m.initWatcher(ctx); err != nil {
-		return err
-	}
-
-	// 读取现有日志（避免丢失 Agent 重启期间的登录）
-	if err := m.readExistingLogs(); err != nil {
-		slog.Warn("读取现有日志失败", "error", err)
-	}
-
-	m.enabled = true
-	slog.Info("SSH登录监控已启动", "logFile", m.logFile)
+	slog.Info("SSH登录监控已启动", "socket", m.socketPath)
 	return nil
 }
 
@@ -125,11 +103,14 @@ func (m *Monitor) stopInternal() error {
 		m.cancel = nil
 	}
 
-	// 关闭 watcher
-	if m.watcher != nil {
-		m.watcher.Close()
-		m.watcher = nil
-		m.watcherOnce = sync.Once{}
+	// 关闭 socket
+	if m.listener != nil {
+		_ = m.listener.Close()
+		m.listener = nil
+	}
+
+	if err := os.Remove(m.socketPath); err != nil && !os.IsNotExist(err) {
+		slog.Warn("移除 socket 失败", "error", err, "path", m.socketPath)
 	}
 
 	// 卸载 PAM Hook
@@ -147,101 +128,69 @@ func (m *Monitor) GetEvents() <-chan SSHLoginEvent {
 	return m.eventCh
 }
 
-// initWatcher 初始化文件监控器
-func (m *Monitor) initWatcher(ctx context.Context) error {
-	var err error
-	m.watcherOnce.Do(func() {
-		m.watcher, err = fsnotify.NewWatcher()
-		if err != nil {
-			err = fmt.Errorf("创建文件监控器失败: %w", err)
-			return
-		}
+// initSocket 初始化 socket 监听
+func (m *Monitor) initSocket(ctx context.Context) error {
+	if err := os.MkdirAll(DefaultSocketDir, 0755); err != nil {
+		return fmt.Errorf("创建 socket 目录失败: %w", err)
+	}
 
-		// 添加日志文件到监控
-		if err = m.watcher.Add(m.logFile); err != nil {
-			err = fmt.Errorf("添加文件监控失败: %w", err)
-			return
-		}
+	if err := os.Remove(m.socketPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("清理旧 socket 失败: %w", err)
+	}
 
-		// 创建 context
-		m.ctx, m.cancel = context.WithCancel(ctx)
+	addr := &net.UnixAddr{Name: m.socketPath, Net: "unixgram"}
+	conn, err := net.ListenUnixgram("unixgram", addr)
+	if err != nil {
+		return fmt.Errorf("监听 socket 失败: %w", err)
+	}
 
-		// 启动监控循环
-		go m.watchLoop()
+	if err := os.Chmod(m.socketPath, 0600); err != nil {
+		slog.Warn("设置 socket 权限失败", "error", err, "path", m.socketPath)
+	}
 
-		slog.Info("文件监控器已启动", "file", m.logFile)
-	})
-	return err
+	m.ctx, m.cancel = context.WithCancel(ctx)
+	m.listener = conn
+
+	go m.readLoop()
+
+	slog.Info("SSH登录 socket 已启动", "path", m.socketPath)
+	return nil
 }
 
-// watchLoop 监控循环
-func (m *Monitor) watchLoop() {
+func (m *Monitor) readLoop() {
+	buf := make([]byte, 4096)
 	for {
-		select {
-		case <-m.ctx.Done():
-			return
-		case event, ok := <-m.watcher.Events:
-			if !ok {
+		n, _, err := m.listener.ReadFromUnix(buf)
+		if err != nil {
+			if errors.Is(err, net.ErrClosed) || errors.Is(err, os.ErrClosed) {
 				return
 			}
-
-			// 检测文件被删除或重命名（logrotate）
-			if event.Op&fsnotify.Remove == fsnotify.Remove ||
-				event.Op&fsnotify.Rename == fsnotify.Rename {
-				slog.Warn("日志文件被删除或轮转，尝试重新监控")
-
-				// 等待新文件创建
-				time.Sleep(1 * time.Second)
-
-				// 重新添加监控
-				if err := m.watcher.Add(m.logFile); err != nil {
-					slog.Error("重新添加文件监控失败", "error", err)
-				} else {
-					m.lastOffset = 0 // 重置偏移量
-				}
-			}
-
-			// 只处理写入事件
-			if event.Op&fsnotify.Write == fsnotify.Write {
-				m.handleFileWrite()
-			}
-		case err, ok := <-m.watcher.Errors:
-			if !ok {
+			select {
+			case <-m.ctx.Done():
 				return
+			default:
 			}
-			slog.Warn("文件监控错误", "error", err)
+			slog.Warn("读取SSH登录事件失败", "error", err)
+			continue
 		}
-	}
-}
 
-// handleFileWrite 处理文件写入事件
-func (m *Monitor) handleFileWrite() {
-	// 打开文件，从上次读取位置继续读
-	f, err := os.Open(m.logFile)
-	if err != nil {
-		slog.Warn("打开日志文件失败", "error", err)
-		return
-	}
-	defer f.Close()
+		if n == 0 {
+			continue
+		}
 
-	// 移动到上次读取位置
-	if _, err := f.Seek(m.lastOffset, 0); err != nil {
-		slog.Warn("移动文件位置失败", "error", err)
-		return
-	}
+		var event SSHLoginEvent
+		if err := json.Unmarshal(buf[:n], &event); err != nil {
+			slog.Warn("解析SSH登录事件失败", "error", err)
+			continue
+		}
 
-	// 解析新增的日志行
-	events, newOffset, err := m.parser.ParseFromReader(f, m.lastOffset)
-	if err != nil {
-		slog.Warn("解析日志失败", "error", err)
-		return
-	}
+		if event.Timestamp == 0 {
+			event.Timestamp = time.Now().UnixMilli()
+		}
+		if event.Status == "" {
+			event.Status = "success"
+		}
 
-	// 更新偏移量
-	m.lastOffset = newOffset
-
-	// 发送事件
-	for _, event := range events {
 		select {
 		case m.eventCh <- event:
 			slog.Info("检测到SSH登录", "user", event.Username, "ip", event.IP, "status", event.Status)
@@ -249,37 +198,4 @@ func (m *Monitor) handleFileWrite() {
 			slog.Warn("事件队列已满，丢弃事件")
 		}
 	}
-}
-
-// readExistingLogs 读取现有日志（Agent重启时）
-func (m *Monitor) readExistingLogs() error {
-	f, err := os.Open(m.logFile)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	// 从文件开头读取所有日志
-	events, newOffset, err := m.parser.ParseFromReader(f, 0)
-	if err != nil {
-		return err
-	}
-
-	m.lastOffset = newOffset
-
-	// 只上报最近的登录（例如最近100条），避免重复上报历史数据
-	startIdx := len(events) - 100
-	if startIdx < 0 {
-		startIdx = 0
-	}
-
-	for i := startIdx; i < len(events); i++ {
-		select {
-		case m.eventCh <- events[i]:
-		default:
-			break
-		}
-	}
-
-	return nil
 }

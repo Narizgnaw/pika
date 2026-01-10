@@ -20,6 +20,7 @@ import (
 	"github.com/dushixiang/pika/pkg/agent/sshmonitor"
 	"github.com/dushixiang/pika/pkg/agent/tamper"
 	"github.com/dushixiang/pika/pkg/version"
+
 	"github.com/gorilla/websocket"
 	"github.com/jpillora/backoff"
 	"github.com/sourcegraph/conc"
@@ -874,7 +875,7 @@ func (a *Agent) handleSSHLoginConfig(conn *websocket.Conn, data json.RawMessage)
 		return
 	}
 
-	slog.Info("收到SSH登录监控配置", "enabled", sshLoginConfig.Enabled, "recordFailed", sshLoginConfig.RecordFailed)
+	slog.Info("收到SSH登录监控配置", "enabled", sshLoginConfig.Enabled)
 
 	// 应用配置
 	ctx := context.Background()
