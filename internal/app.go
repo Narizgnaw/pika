@@ -3,14 +3,16 @@ package internal
 import (
 	"bytes"
 	"context"
-	"html/template"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/dushixiang/pika/internal/config"
 	"github.com/dushixiang/pika/internal/handler"
+	"github.com/dushixiang/pika/internal/migrate"
 	"github.com/dushixiang/pika/internal/models"
 	"github.com/dushixiang/pika/internal/scheduler"
 	"github.com/dushixiang/pika/pkg/replace"
@@ -66,6 +68,11 @@ func setup(app *orz.App) error {
 		return err
 	}
 
+	// 自动化升级数据库
+	if err := migrate.AutoMigrate(app.Logger(), app.GetDatabase(), components.PropertyService); err != nil {
+		app.Logger().Warn("数据库自动升级失败", zap.Error(err))
+	}
+
 	// 初始化默认属性配置
 	ctx := context.Background()
 	if err := initDefaultProperties(ctx, components, app.Logger()); err != nil {
@@ -108,6 +115,13 @@ func setupApi(app *orz.App, components *AppComponents) {
 
 	e.Use(middleware.Recover())
 	e.Use(ErrorHandler(logger))
+	e.Use(middleware.RecoverWithConfig(middleware.RecoverConfig{
+		LogErrorFunc: func(c echo.Context, err error, stack []byte) error {
+			sugar := logger.Named("[PANIC RECOVER]").Sugar()
+			sugar.Error(fmt.Sprintf("%v %s\n", err, stack))
+			return err
+		},
+	}))
 
 	indexTemplate, err := template.New("index").Parse(web.IndexHtml())
 	if err != nil {
@@ -186,7 +200,6 @@ func setupApi(app *orz.App, components *AppComponents) {
 		publicApiWithOptionalAuth.GET("/agents/:id/metrics", components.AgentHandler.GetMetrics)
 		publicApiWithOptionalAuth.GET("/agents/:id/metrics/latest", components.AgentHandler.GetLatestMetrics)
 		publicApiWithOptionalAuth.GET("/agents/:id/network-interfaces", components.AgentHandler.GetAvailableNetworkInterfaces)
-		publicApiWithOptionalAuth.GET("/agents/:id/traffic", components.AgentHandler.GetTrafficStats)
 
 		// 监控统计数据（公开访问，支持可选认证）- 用于公共展示页面
 		publicApiWithOptionalAuth.GET("/monitors", components.MonitorHandler.GetMonitors)
@@ -230,12 +243,14 @@ func setupApi(app *orz.App, components *AppComponents) {
 		adminApi.GET("/agents/statistics", components.AgentHandler.GetStatistics)
 		adminApi.GET("/agents/tags", components.AgentHandler.GetTags)
 		adminApi.GET("/agents/:id", components.AgentHandler.GetForAdmin)
+		adminApi.GET("/agents/:id/metrics/latest", components.AgentHandler.GetAdminLatestMetrics)
 		adminApi.PUT("/agents/:id", components.AgentHandler.UpdateInfo)
 		adminApi.POST("/agents/batch/tags", components.AgentHandler.BatchUpdateTags)
 		adminApi.DELETE("/agents/:id", components.AgentHandler.Delete)
 		adminApi.POST("/agents/:id/command", components.AgentHandler.SendCommand)
 
 		// 流量管理（管理员访问）
+		adminApi.GET("/agents/:id/traffic", components.AgentHandler.GetTrafficStats)
 		adminApi.PUT("/agents/:id/traffic-config", components.AgentHandler.UpdateTrafficConfig)
 		adminApi.POST("/agents/:id/traffic-reset", components.AgentHandler.ResetAgentTraffic)
 
@@ -244,10 +259,16 @@ func setupApi(app *orz.App, components *AppComponents) {
 		adminApi.GET("/agents/:id/audit/results", components.AgentHandler.ListAuditResults)
 
 		// 防篡改管理（管理员功能）
-		adminApi.GET("/agents/:id/tamper/config", components.TamperHandler.GetTamperConfig)
-		adminApi.PUT("/agents/:id/tamper/config", components.TamperHandler.UpdateTamperConfig)
-		adminApi.GET("/agents/:id/tamper/events", components.TamperHandler.GetTamperEvents)
-		adminApi.GET("/agents/:id/tamper/alerts", components.TamperHandler.GetTamperAlerts)
+		adminApi.GET("/agents/:id/tamper/config", components.TamperHandler.GetConfig)
+		adminApi.PUT("/agents/:id/tamper/config", components.TamperHandler.UpdateConfig)
+		adminApi.GET("/agents/:id/tamper/events", components.TamperHandler.ListEvents)
+		adminApi.DELETE("/agents/:id/tamper/events", components.TamperHandler.DeleteEvents)
+
+		// SSH 登录监控管理（管理员功能）
+		adminApi.GET("/agents/:id/ssh-login/config", components.SSHLoginHandler.GetConfig)
+		adminApi.POST("/agents/:id/ssh-login/config", components.SSHLoginHandler.UpdateConfig)
+		adminApi.GET("/agents/:id/ssh-login/events", components.SSHLoginHandler.ListEvents)
+		adminApi.DELETE("/agents/:id/ssh-login/events", components.SSHLoginHandler.DeleteEvents)
 
 		// 通用属性管理
 		adminApi.GET("/properties/:id", components.PropertyHandler.GetProperty)
@@ -281,6 +302,7 @@ func setupApi(app *orz.App, components *AppComponents) {
 		adminApi.POST("/ddns/:id/enable", components.DDNSHandler.Enable)
 		adminApi.POST("/ddns/:id/disable", components.DDNSHandler.Disable)
 		adminApi.GET("/ddns/:id/records", components.DDNSHandler.GetRecords)
+		adminApi.POST("/ddns/:id/trigger", components.DDNSHandler.TriggerUpdate)
 	}
 
 	// OIDC 认证路由（如果启用）
@@ -293,19 +315,17 @@ func setupApi(app *orz.App, components *AppComponents) {
 func autoMigrate(database *gorm.DB) error {
 	// 自动迁移数据库表
 	return database.AutoMigrate(
-		&models.Agent{},               // 探针
-		&models.ApiKey{},              // ApiKey
-		&models.HostMetric{},          // 保留主机静态信息表
-		&models.AuditResult{},         // 审计历史
-		&models.Property{},            // 系统属性
-		&models.AlertRecord{},         // 告警记录
-		&models.AlertState{},          // 告警状态
-		&models.MonitorTask{},         // 服务监控
-		&models.TamperProtectConfig{}, // 防篡改配置
-		&models.TamperEvent{},         // 防篡改事件
-		&models.TamperAlert{},         // 防篡改告警
-		&models.DDNSConfig{},          // DDNS 配置
-		&models.DDNSRecord{},          // DDNS 记录
+		&models.Agent{},         // 探针
+		&models.ApiKey{},        // ApiKey
+		&models.AuditResult{},   // 审计历史
+		&models.Property{},      // 系统属性
+		&models.AlertRecord{},   // 告警记录
+		&models.AlertState{},    // 告警状态
+		&models.MonitorTask{},   // 服务监控
+		&models.TamperEvent{},   // 防篡改事件
+		&models.DDNSConfig{},    // DDNS 配置
+		&models.DDNSRecord{},    // DDNS 记录
+		&models.SSHLoginEvent{}, // SSH 登录事件
 	)
 }
 
@@ -427,7 +447,7 @@ func startTrafficResetCheck(ctx context.Context, components *AppComponents, logg
 			logger.Info("流量重置检查任务已停止")
 			return
 		case <-ticker.C:
-			if err := components.AgentService.CheckAndResetTraffic(ctx); err != nil {
+			if err := components.TrafficService.CheckAndResetTraffic(ctx); err != nil {
 				logger.Error("流量重置检查失败", zap.Error(err))
 			}
 		}

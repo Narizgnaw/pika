@@ -1,6 +1,8 @@
 package collector
 
 import (
+	"time"
+
 	"github.com/dushixiang/pika/internal/protocol"
 	"github.com/dushixiang/pika/pkg/agent/config"
 )
@@ -177,8 +179,9 @@ func (m *Manager) sendMetrics(conn WebSocketWriter, metricType protocol.MetricTy
 	return conn.WriteJSON(protocol.OutboundMessage{
 		Type: protocol.MessageTypeMetrics,
 		Data: protocol.MetricsPayload{
-			Type: metricType,
-			Data: data,
+			Type:      metricType,
+			Data:      data,
+			Timestamp: time.Now().UnixMilli(),
 		},
 	})
 }

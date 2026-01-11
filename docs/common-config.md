@@ -65,6 +65,21 @@ App:
 htpasswd -nBC 12 '' | tr -d ':\n'
 ```
 
+或者使用在线网站生成密码
+
+https://tools.typesafe.cn/bcrypt
+
+### 推荐使用第三方认证服务
+
+- 优先推荐 Github OAuth 认证
+- 建议使用 [next-terminal](https://github.com/dushixiang/next-terminal) 作为 OIDC 认证服务，支持 OTP 认证，Passkey 认证
+
+### 修改配置文件后需要重启服务
+
+```shell
+docker compose restart pika
+```
+
 ## 生产环境部署建议
 
 ### 1. 安全配置

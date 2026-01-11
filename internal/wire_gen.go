@@ -9,7 +9,6 @@ package internal
 import (
 	"github.com/dushixiang/pika/internal/config"
 	"github.com/dushixiang/pika/internal/handler"
-	"github.com/dushixiang/pika/internal/repo"
 	"github.com/dushixiang/pika/internal/service"
 	"github.com/dushixiang/pika/internal/vmclient"
 	"github.com/dushixiang/pika/internal/websocket"
@@ -29,7 +28,9 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 	accountHandler := handler.NewAccountHandler(accountService)
 	apiKeyService := service.NewApiKeyService(logger, db)
 	propertyService := service.NewPropertyService(logger, db)
-	trafficService := service.NewTrafficService(logger, db)
+	notifier := service.NewNotifier(logger)
+	notificationService := service.NewNotificationService(logger, propertyService, notifier)
+	trafficService := service.NewTrafficService(logger, db, notificationService)
 	vmClient := provideVMClient(cfg, logger)
 	metricService := service.NewMetricService(logger, db, propertyService, trafficService, vmClient)
 	geoIPService, err := service.NewGeoIPService(logger, cfg)
@@ -39,14 +40,11 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 	agentService := service.NewAgentService(logger, db, apiKeyService, metricService, geoIPService)
 	manager := websocket.NewManager(logger)
 	monitorService := service.NewMonitorService(logger, db, metricService, manager)
-	tamperRepo := repo.NewTamperRepo(db)
-	tamperService := service.NewTamperService(logger, tamperRepo, manager)
-	ddnsConfigRepo := repo.NewDDNSConfigRepo(db)
-	ddnsRecordRepo := repo.NewDDNSRecordRepo(db)
-	ddnsService := service.NewDDNSService(logger, ddnsConfigRepo, ddnsRecordRepo, propertyService, manager)
-	agentHandler := handler.NewAgentHandler(logger, agentService, metricService, monitorService, tamperService, ddnsService, manager)
+	tamperService := service.NewTamperService(logger, db, manager, notificationService)
+	ddnsService := service.NewDDNSService(logger, db, propertyService, manager)
+	sshLoginService := service.NewSSHLoginService(logger, db, manager, geoIPService, notificationService)
+	agentHandler := handler.NewAgentHandler(logger, agentService, trafficService, metricService, monitorService, tamperService, ddnsService, sshLoginService, manager)
 	apiKeyHandler := handler.NewApiKeyHandler(logger, apiKeyService)
-	notifier := service.NewNotifier(logger)
 	alertService := service.NewAlertService(logger, db, propertyService, monitorService, notifier)
 	alertHandler := handler.NewAlertHandler(logger, alertService)
 	propertyHandler := handler.NewPropertyHandler(logger, propertyService, notifier)
@@ -54,6 +52,7 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 	tamperHandler := handler.NewTamperHandler(logger, tamperService)
 	dnsProviderHandler := handler.NewDNSProviderHandler(logger, propertyService)
 	ddnsHandler := handler.NewDDNSHandler(logger, ddnsService)
+	sshLoginHandler := handler.NewSSHLoginHandler(logger, sshLoginService)
 	appComponents := &AppComponents{
 		AccountHandler:     accountHandler,
 		AgentHandler:       agentHandler,
@@ -64,7 +63,9 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 		TamperHandler:      tamperHandler,
 		DNSProviderHandler: dnsProviderHandler,
 		DDNSHandler:        ddnsHandler,
+		SSHLoginHandler:    sshLoginHandler,
 		AgentService:       agentService,
+		TrafficService:     trafficService,
 		MetricService:      metricService,
 		AlertService:       alertService,
 		PropertyService:    propertyService,
@@ -72,6 +73,7 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 		ApiKeyService:      apiKeyService,
 		TamperService:      tamperService,
 		DDNSService:        ddnsService,
+		SSHLoginService:    sshLoginService,
 		WSManager:          manager,
 		VMClient:           vmClient,
 	}
@@ -91,8 +93,10 @@ type AppComponents struct {
 	TamperHandler      *handler.TamperHandler
 	DNSProviderHandler *handler.DNSProviderHandler
 	DDNSHandler        *handler.DDNSHandler
+	SSHLoginHandler    *handler.SSHLoginHandler
 
 	AgentService    *service.AgentService
+	TrafficService  *service.TrafficService
 	MetricService   *service.MetricService
 	AlertService    *service.AlertService
 	PropertyService *service.PropertyService
@@ -100,6 +104,7 @@ type AppComponents struct {
 	ApiKeyService   *service.ApiKeyService
 	TamperService   *service.TamperService
 	DDNSService     *service.DDNSService
+	SSHLoginService *service.SSHLoginService
 
 	WSManager *websocket.Manager
 	VMClient  *vmclient.VMClient

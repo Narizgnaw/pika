@@ -12,12 +12,14 @@ export default defineConfig({
     resolve: {
         alias: {
             "@": path.resolve(__dirname, "./src"),
+            "@portal": path.resolve(__dirname, "./src/portal"),
+            "@admin": path.resolve(__dirname, "./src/admin"),
         },
     },
     server: {
         proxy: {
             '/api/': {
-                target: 'http://localhost:18888/',
+                target: 'http://localhost:8080/',
                 changeOrigin: true,
             },
         },

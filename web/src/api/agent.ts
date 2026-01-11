@@ -1,5 +1,14 @@
 import {del, get, post, put} from './request';
-import type {Agent, LatestMetrics, TrafficStats, UpdateTrafficConfigRequest} from '@/types';
+import type {
+    Agent,
+    LatestMetrics,
+    SSHLoginConfig,
+    SSHLoginEvent,
+    TrafficStats,
+    UpdateSSHLoginConfigRequest,
+    UpdateTrafficConfigRequest
+} from '@/types';
+import qs from "qs";
 
 export interface ListAgentsResponse {
     items: Agent[];
@@ -35,10 +44,13 @@ export interface GetAgentMetricsResponse {
 }
 
 // 管理员接口 - 获取所有探针（需要认证）
-export const getAgentPaging = (pageIndex: number = 1, pageSize: number = 10, hostname?: string, ip?: string, status?: string) => {
+export const getAgentPaging = (pageIndex: number = 1, pageSize: number = 10, name?: string, hostname?: string, ip?: string, status?: string) => {
     const params = new URLSearchParams();
     params.append('pageIndex', pageIndex.toString());
     params.append('pageSize', pageSize.toString());
+    if (name) {
+        params.append('name', name);
+    }
     if (hostname) {
         params.append('hostname', hostname);
     }
@@ -48,8 +60,8 @@ export const getAgentPaging = (pageIndex: number = 1, pageSize: number = 10, hos
     if (status) {
         params.append('status', status);
     }
-    params.set('sortOrder', 'asc');
-    params.set('sortField', 'name');
+    params.set('sortOrder', 'descend');
+    params.set('sortField', 'weight');
     return get<ListAgentsResponse>(`/admin/agents?${params.toString()}`);
 };
 
@@ -64,6 +76,10 @@ export const getAgent = (id: string) => {
 // 管理员接口 - 获取探针详情（显示完整信息）
 export const getAgentForAdmin = (id: string) => {
     return get<Agent>(`/admin/agents/${id}`);
+};
+
+export const getAgentLatestMetricsForAdmin = (agentId: string) => {
+    return get<LatestMetrics>(`/admin/agents/${agentId}/metrics/latest`);
 };
 
 export const getAgentMetrics = (params: GetAgentMetricsRequest) => {
@@ -509,9 +525,9 @@ export const updateTrafficConfig = (agentId: string, data: UpdateTrafficConfigRe
     return put(`/admin/agents/${agentId}/traffic-config`, data);
 };
 
-// 获取流量统计（公开接口，支持可选认证）
+// 获取流量统计（管理员接口）
 export const getTrafficStats = (agentId: string) => {
-    return get<TrafficStats>(`/agents/${agentId}/traffic`);
+    return get<TrafficStats>(`/admin/agents/${agentId}/traffic`);
 };
 
 // 手动重置流量（管理员接口）
@@ -526,4 +542,29 @@ export interface GetServerUrlResponse {
 
 export const getServerUrl = () => {
     return post<GetServerUrlResponse>('/admin/server-url', {});
+};
+
+// SSH 登录监控相关接口
+
+// 获取 SSH 登录监控配置
+export const getSSHLoginConfig = async (agentId: string) => {
+    const response = await get<SSHLoginConfig>(`/admin/agents/${agentId}/ssh-login/config`);
+    return response.data;
+};
+
+// 更新 SSH 登录监控配置
+export const updateSSHLoginConfig = async (agentId: string, data: UpdateSSHLoginConfigRequest) => {
+    await post<SSHLoginConfig>(`/admin/agents/${agentId}/ssh-login/config`, data);
+};
+
+// 获取 SSH 登录事件列表
+export const getSSHLoginEvents = async (agentId: string, params?: any) => {
+   const query = qs.stringify(params);
+    const response = await get<{ items: SSHLoginEvent[]; total: number }>(`/admin/agents/${agentId}/ssh-login/events?${query}`);
+    return response.data;
+};
+
+// 删除 SSH 登录事件
+export const deleteSSHLoginEvents = async (agentId: string) => {
+    await del(`/admin/agents/${agentId}/ssh-login/events`);
 };

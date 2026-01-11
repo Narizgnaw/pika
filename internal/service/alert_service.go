@@ -226,7 +226,6 @@ func (s *AlertService) resolveAlert(ctx context.Context, config *models.AlertCon
 			} else {
 				now := time.Now().UnixMilli()
 				existingRecord.Status = "resolved"
-				existingRecord.ActualValue = state.Value
 				existingRecord.ResolvedAt = now
 				existingRecord.UpdatedAt = now
 

@@ -86,6 +86,8 @@ export interface SystemConfig {
     logoBase64: string;    // Logo 的 base64 编码
     icpCode: string;       // ICP 备案号
     defaultView: string;   // 默认视图 grid,list
+    customCSS: string;     // 自定义 CSS
+    customJS: string;      // 自定义 JS
 }
 
 // 获取系统配置（管理后台使用）
@@ -124,11 +126,18 @@ export interface AlertRules {
     agentOfflineDuration: number;   // 探针离线持续时间（秒）
 }
 
+export interface AlertNotifications {
+    trafficEnabled: boolean;         // 流量告警通知
+    sshLoginSuccessEnabled: boolean; // SSH 登录成功通知
+    tamperEventEnabled: boolean;     // 防篡改事件通知
+}
+
 // 全局告警配置
 export interface AlertConfig {
     enabled: boolean;  // 全局告警开关
     maskIP: boolean;   // 是否在通知中打码 IP 地址
     rules: AlertRules;
+    notifications: AlertNotifications;
 }
 
 // 获取告警配置
@@ -140,4 +149,3 @@ export const getAlertConfig = async (): Promise<AlertConfig> => {
 export const saveAlertConfig = async (config: AlertConfig): Promise<void> => {
     return saveProperty(PROPERTY_ID_ALERT_CONFIG, '告警配置', config);
 };
-

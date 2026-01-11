@@ -39,8 +39,9 @@ type AgentInfo struct {
 
 // MetricsPayload 指标数据包装，发送端/接收端统一使用
 type MetricsPayload struct {
-	Type MetricType  `json:"type"`
-	Data interface{} `json:"data"`
+	Type      MetricType  `json:"type"`
+	Data      interface{} `json:"data"`
+	Timestamp int64       `json:"timestamp,omitempty"` // 客户端采集时间(毫秒)
 }
 type MessageType string
 
@@ -52,16 +53,20 @@ const (
 	MessageTypeHeartbeat   MessageType = "heartbeat"
 	MessageTypeCommand     MessageType = "command"
 	MessageTypeCommandResp MessageType = "command_response"
+	MessageTypeUninstall   MessageType = "uninstall"
 	// 指标消息
 	MessageTypeMetrics       MessageType = "metrics"
 	MessageTypeMonitorConfig MessageType = "monitor_config"
 	// 防篡改消息
 	MessageTypeTamperProtect MessageType = "tamper_protect"
 	MessageTypeTamperEvent   MessageType = "tamper_event"
-	MessageTypeTamperAlert   MessageType = "tamper_alert"
 	// DDNS 消息
 	MessageTypeDDNSConfig   MessageType = "ddns_config"
 	MessageTypeDDNSIPReport MessageType = "ddns_ip_report"
+	// SSH 登录监控消息
+	MessageTypeSSHLoginConfig       MessageType = "ssh_login_config"
+	MessageTypeSSHLoginConfigResult MessageType = "ssh_login_config_result" // Agent 反馈配置应用结果
+	MessageTypeSSHLoginEvent        MessageType = "ssh_login_event"
 )
 
 type MetricType string
@@ -167,18 +172,21 @@ type LoadData struct {
 
 // HostInfoData 主机信息
 type HostInfoData struct {
-	Hostname             string `json:"hostname"`
-	Uptime               uint64 `json:"uptime"`
-	BootTime             uint64 `json:"bootTime"`
-	Procs                uint64 `json:"procs"`
-	OS                   string `json:"os"`
-	Platform             string `json:"platform"`
-	PlatformFamily       string `json:"platformFamily"`
-	PlatformVersion      string `json:"platformVersion"`
-	KernelVersion        string `json:"kernelVersion"`
-	KernelArch           string `json:"kernelArch"`
-	VirtualizationSystem string `json:"virtualizationSystem,omitempty"`
-	VirtualizationRole   string `json:"virtualizationRole,omitempty"`
+	Hostname             string  `json:"hostname"`
+	Uptime               uint64  `json:"uptime"`
+	BootTime             uint64  `json:"bootTime"`
+	Procs                uint64  `json:"procs"`
+	Load1                float64 `json:"load1"`
+	Load5                float64 `json:"load5"`
+	Load15               float64 `json:"load15"`
+	OS                   string  `json:"os"`
+	Platform             string  `json:"platform"`
+	PlatformFamily       string  `json:"platformFamily"`
+	PlatformVersion      string  `json:"platformVersion"`
+	KernelVersion        string  `json:"kernelVersion"`
+	KernelArch           string  `json:"kernelArch"`
+	VirtualizationSystem string  `json:"virtualizationSystem,omitempty"`
+	VirtualizationRole   string  `json:"virtualizationRole,omitempty"`
 }
 
 // GPUData GPU数据
@@ -318,15 +326,15 @@ type TamperProtectResponse struct {
 	Paths   []string `json:"paths"`             // 当前保护的目录列表
 	Added   []string `json:"added,omitempty"`   // 新增的目录
 	Removed []string `json:"removed,omitempty"` // 移除的目录
-	Error   string   `json:"error,omitempty"`   // 错误信息
 }
 
 // TamperEventData 防篡改事件数据
 type TamperEventData struct {
-	Path      string `json:"path"`      // 被修改的路径
-	Operation string `json:"operation"` // 操作类型: write, remove, rename, chmod, create
-	Timestamp int64  `json:"timestamp"` // 事件时间(毫秒)
-	Details   string `json:"details"`   // 详细信息
+	Path      string `json:"path"`               // 被修改的路径
+	Operation string `json:"operation"`          // 操作类型: write, remove, rename, chmod, create, attr_tamper
+	Timestamp int64  `json:"timestamp"`          // 事件时间(毫秒)
+	Details   string `json:"details"`            // 详细信息
+	Restored  bool   `json:"restored,omitempty"` // 是否已自动恢复（仅用于 attr_tamper 操作）
 }
 
 // TamperAlertData 防篡改属性告警数据
@@ -670,4 +678,29 @@ type LoginStatistics struct {
 	UniqueIPs        map[string]int `json:"uniqueIPs,omitempty"`        // 唯一IP统计
 	UniqueUsers      map[string]int `json:"uniqueUsers,omitempty"`      // 唯一用户统计
 	HighFrequencyIPs map[string]int `json:"highFrequencyIPs,omitempty"` // 高频IP (登录次数>10)
+}
+
+// ==================== SSH 登录监控相关数据结构 ====================
+
+// SSHLoginConfig SSH登录监控配置
+type SSHLoginConfig struct {
+	Enabled bool `json:"enabled"` // 是否启用监控
+}
+
+// SSHLoginConfigResult SSH登录监控配置应用结果（Agent 反馈）
+type SSHLoginConfigResult struct {
+	Success bool   `json:"success"` // 配置应用是否成功
+	Enabled bool   `json:"enabled"` // 当前启用状态
+	Message string `json:"message"` // 结果描述信息
+}
+
+// SSHLoginEvent SSH登录事件
+type SSHLoginEvent struct {
+	Username  string `json:"username"`            // 登录用户名
+	IP        string `json:"ip"`                  // 来源IP
+	Port      string `json:"port,omitempty"`      // 来源端口
+	Timestamp int64  `json:"timestamp"`           // 登录时间（毫秒时间戳）
+	Status    string `json:"status"`              // success/failed
+	TTY       string `json:"tty,omitempty"`       // 终端
+	SessionID string `json:"sessionId,omitempty"` // 会话ID
 }

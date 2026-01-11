@@ -46,10 +46,7 @@ func (r ApiKeyHandler) Paging(c echo.Context) error {
 	}
 
 	// 返回完整密钥,由前端控制显示/隐藏
-	return orz.Ok(c, orz.Map{
-		"items": page.Items,
-		"total": page.Total,
-	})
+	return orz.Ok(c, page)
 }
 
 // Create 生成API密钥
@@ -108,9 +105,7 @@ func (r ApiKeyHandler) Update(c echo.Context) error {
 		return err
 	}
 
-	return orz.Ok(c, orz.Map{
-		"message": "API密钥名称更新成功",
-	})
+	return orz.Ok(c, orz.Map{})
 }
 
 // Delete 删除API密钥
@@ -123,9 +118,7 @@ func (r ApiKeyHandler) Delete(c echo.Context) error {
 		return err
 	}
 
-	return orz.Ok(c, orz.Map{
-		"message": "API密钥删除成功",
-	})
+	return orz.Ok(c, orz.Map{})
 }
 
 // Enable 启用API密钥
@@ -138,9 +131,7 @@ func (r ApiKeyHandler) Enable(c echo.Context) error {
 		return err
 	}
 
-	return orz.Ok(c, orz.Map{
-		"message": "API密钥启用成功",
-	})
+	return orz.Ok(c, orz.Map{})
 }
 
 // Disable 禁用API密钥
@@ -153,7 +144,5 @@ func (r ApiKeyHandler) Disable(c echo.Context) error {
 		return err
 	}
 
-	return orz.Ok(c, orz.Map{
-		"message": "API密钥禁用成功",
-	})
+	return orz.Ok(c, orz.Map{})
 }

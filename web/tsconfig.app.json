@@ -20,6 +20,12 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@portal/*": [
+        "./src/portal/*"
+      ],
+      "@admin/*": [
+        "./src/admin/*"
       ]
     },
     "allowSyntheticDefaultImports": true

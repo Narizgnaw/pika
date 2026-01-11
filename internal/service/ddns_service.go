@@ -35,16 +35,14 @@ type DDNSService struct {
 }
 
 func NewDDNSService(
-	logger *zap.Logger,
-	configRepo *repo.DDNSConfigRepo,
-	recordRepo *repo.DDNSRecordRepo,
+	logger *zap.Logger, db *gorm.DB,
 	propertyService *PropertyService,
 	wsManager *websocket.Manager,
 ) *DDNSService {
 	s := &DDNSService{
 		logger:          logger,
-		ConfigRepo:      configRepo,
-		recordRepo:      recordRepo,
+		ConfigRepo:      repo.NewDDNSConfigRepo(db),
+		recordRepo:      repo.NewDDNSRecordRepo(db),
 		propertyService: propertyService,
 		wsManager:       wsManager,
 		ipCache:         syncx.NewSafeMap[string, *ipCacheData](),
@@ -417,4 +415,31 @@ func (s *DDNSService) sendDDNSConfigToAgent(config *models.DDNSConfig) error {
 	}
 
 	return s.wsManager.SendToClient(config.AgentID, msgData)
+}
+
+// TriggerUpdate 手动触发 DDNS 更新
+// 向探针发送配置消息，触发探针立即获取并上报 IP 地址
+func (s *DDNSService) TriggerUpdate(ctx context.Context, configID string) error {
+	// 获取配置
+	config, err := s.GetConfig(ctx, configID)
+	if err != nil {
+		return fmt.Errorf("获取 DDNS 配置失败: %w", err)
+	}
+
+	// 检查配置是否启用
+	if !config.Enabled {
+		return fmt.Errorf("DDNS 配置未启用")
+	}
+
+	// 向探针发送配置，触发探针立即上报 IP
+	if err := s.sendDDNSConfigToAgent(config); err != nil {
+		return fmt.Errorf("向探针发送配置失败: %w", err)
+	}
+
+	s.logger.Info("手动触发 DDNS 更新成功",
+		zap.String("configID", configID),
+		zap.String("agentID", config.AgentID),
+		zap.String("name", config.Name))
+
+	return nil
 }

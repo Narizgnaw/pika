@@ -19,20 +19,24 @@ import (
 type AgentService struct {
 	logger *zap.Logger
 	*orz.Service
-	AgentRepo     *repo.AgentRepo
-	apiKeyService *ApiKeyService
-	metricService *MetricService
-	geoipService  *GeoIPService
+	AgentRepo         *repo.AgentRepo
+	TamperEventRepo   *repo.TamperEventRepo
+	SSHLoginEventRepo *repo.SSHLoginEventRepo
+	apiKeyService     *ApiKeyService
+	metricService     *MetricService
+	geoipService      *GeoIPService
 }
 
 func NewAgentService(logger *zap.Logger, db *gorm.DB, apiKeyService *ApiKeyService, metricService *MetricService, geoipService *GeoIPService) *AgentService {
 	return &AgentService{
-		logger:        logger,
-		Service:       orz.NewService(db),
-		AgentRepo:     repo.NewAgentRepo(db),
-		apiKeyService: apiKeyService,
-		metricService: metricService,
-		geoipService:  geoipService,
+		logger:            logger,
+		Service:           orz.NewService(db),
+		AgentRepo:         repo.NewAgentRepo(db),
+		TamperEventRepo:   repo.NewTamperEventRepo(db),
+		SSHLoginEventRepo: repo.NewSSHLoginEventRepo(db),
+		apiKeyService:     apiKeyService,
+		metricService:     metricService,
+		geoipService:      geoipService,
 	}
 }
 
@@ -332,15 +336,21 @@ func (s *AgentService) GetStatistics(ctx context.Context) (map[string]interface{
 func (s *AgentService) DeleteAgent(ctx context.Context, agentID string) error {
 	// 在事务中执行所有删除操作
 	return s.Transaction(ctx, func(ctx context.Context) error {
-		// 1. 删除探针的所有指标数据
-		if err := s.metricService.DeleteAgentMetrics(ctx, agentID); err != nil {
-			s.logger.Error("删除探针指标数据失败", zap.String("agentId", agentID), zap.Error(err))
+		// 1. 删除探针的审计结果
+		if err := s.AgentRepo.DeleteAuditResults(ctx, agentID); err != nil {
+			s.logger.Error("删除探针审计结果失败", zap.String("agentId", agentID), zap.Error(err))
 			return err
 		}
 
-		// 2. 删除探针的审计结果
-		if err := s.AgentRepo.DeleteAuditResults(ctx, agentID); err != nil {
-			s.logger.Error("删除探针审计结果失败", zap.String("agentId", agentID), zap.Error(err))
+		// 2. 删除探针的目录保护事件数据
+		if err := s.TamperEventRepo.DeleteEventsByAgentID(ctx, agentID); err != nil {
+			s.logger.Error("删除探针目录保护事件失败", zap.String("agentId", agentID), zap.Error(err))
+			return err
+		}
+
+		// 3. 删除探针的SSH登录事件数据
+		if err := s.SSHLoginEventRepo.DeleteEventsByAgentID(ctx, agentID); err != nil {
+			s.logger.Error("删除探针SSH登录事件失败", zap.String("agentId", agentID), zap.Error(err))
 			return err
 		}
 
@@ -466,188 +476,4 @@ func (s *AgentService) InitStatus(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-// UpdateTrafficConfig 更新流量配置
-func (s *AgentService) UpdateTrafficConfig(ctx context.Context, agentID string, limit uint64, resetDay int) error {
-	if resetDay < 0 || resetDay > 31 {
-		return fmt.Errorf("重置日期必须在0-31之间")
-	}
-
-	agent, err := s.AgentRepo.FindById(ctx, agentID)
-	if err != nil {
-		return err
-	}
-
-	now := time.Now().UnixMilli()
-	oldResetDay := agent.TrafficResetDay
-
-	agent.TrafficLimit = limit
-	agent.TrafficResetDay = resetDay
-
-	// 如果是首次设置或修改重置日期,重置流量统计
-	if agent.TrafficPeriodStart == 0 || resetDay != oldResetDay {
-		agent.TrafficUsed = 0
-		agent.TrafficPeriodStart = now
-		agent.TrafficBaselineRecv = 0 // 下次上报时会设置正确的基线
-		agent.TrafficAlertSent80 = false
-		agent.TrafficAlertSent90 = false
-		agent.TrafficAlertSent100 = false
-	}
-
-	agent.UpdatedAt = now
-	return s.AgentRepo.UpdateById(ctx, &agent)
-}
-
-// GetTrafficStats 获取流量统计信息
-func (s *AgentService) GetTrafficStats(ctx context.Context, agentID string) (*TrafficStats, error) {
-	agent, err := s.AgentRepo.FindById(ctx, agentID)
-	if err != nil {
-		return nil, err
-	}
-
-	stats := &TrafficStats{
-		TrafficLimit:    agent.TrafficLimit,
-		TrafficUsed:     agent.TrafficUsed,
-		TrafficResetDay: agent.TrafficResetDay,
-		PeriodStart:     agent.TrafficPeriodStart,
-		AlertsSent: TrafficAlerts{
-			Sent80:  agent.TrafficAlertSent80,
-			Sent90:  agent.TrafficAlertSent90,
-			Sent100: agent.TrafficAlertSent100,
-		},
-	}
-
-	// 计算使用百分比
-	if agent.TrafficLimit > 0 {
-		stats.TrafficUsedPercent = float64(agent.TrafficUsed) / float64(agent.TrafficLimit) * 100
-		if agent.TrafficUsed < agent.TrafficLimit {
-			stats.TrafficRemaining = agent.TrafficLimit - agent.TrafficUsed
-		} else {
-			stats.TrafficRemaining = 0
-		}
-	}
-
-	// 计算下次重置日期和剩余天数
-	if agent.TrafficResetDay > 0 && agent.TrafficPeriodStart > 0 {
-		periodStart := time.UnixMilli(agent.TrafficPeriodStart)
-		nextReset := calculateNextResetDate(periodStart, agent.TrafficResetDay)
-		stats.PeriodEnd = nextReset.UnixMilli()
-		stats.DaysUntilReset = int(time.Until(nextReset).Hours() / 24)
-		if stats.DaysUntilReset < 0 {
-			stats.DaysUntilReset = 0
-		}
-	}
-
-	return stats, nil
-}
-
-// ResetAgentTraffic 重置探针流量
-func (s *AgentService) ResetAgentTraffic(ctx context.Context, agentID string) error {
-	agent, err := s.AgentRepo.FindById(ctx, agentID)
-	if err != nil {
-		return err
-	}
-
-	now := time.Now().UnixMilli()
-
-	updates := map[string]interface{}{
-		"traffic_used":          0,
-		"traffic_baseline_recv": 0, // 下次上报时会设置正确的基线
-		"traffic_period_start":  now,
-		"traffic_alert_sent80":  false,
-		"traffic_alert_sent90":  false,
-		"traffic_alert_sent100": false,
-		"updated_at":            now,
-	}
-
-	s.logger.Info("探针流量已重置",
-		zap.String("agentId", agentID),
-		zap.String("agentName", agent.Name))
-
-	return s.AgentRepo.UpdateTrafficStats(ctx, agentID, updates)
-}
-
-// CheckAndResetTraffic 检查并重置所有到期的探针流量(定时任务调用)
-func (s *AgentService) CheckAndResetTraffic(ctx context.Context) error {
-	agents, err := s.AgentRepo.FindAgentsWithTrafficReset(ctx)
-	if err != nil {
-		return err
-	}
-
-	now := time.Now()
-	resetCount := 0
-
-	for _, agent := range agents {
-		if s.shouldResetTraffic(&agent, now) {
-			if err := s.ResetAgentTraffic(ctx, agent.ID); err != nil {
-				s.logger.Error("重置探针流量失败",
-					zap.String("agentId", agent.ID),
-					zap.Error(err))
-				continue
-			}
-			resetCount++
-		}
-	}
-
-	if resetCount > 0 {
-		s.logger.Info("流量重置检查完成", zap.Int("重置数量", resetCount))
-	}
-
-	return nil
-}
-
-// shouldResetTraffic 判断是否需要重置流量
-func (s *AgentService) shouldResetTraffic(agent *models.Agent, now time.Time) bool {
-	if agent.TrafficResetDay == 0 || agent.TrafficPeriodStart == 0 {
-		return false
-	}
-
-	periodStart := time.UnixMilli(agent.TrafficPeriodStart)
-	nextReset := calculateNextResetDate(periodStart, agent.TrafficResetDay)
-
-	return now.After(nextReset) || now.Equal(nextReset)
-}
-
-// calculateNextResetDate 计算下次重置日期
-func calculateNextResetDate(periodStart time.Time, resetDay int) time.Time {
-	year, month, _ := periodStart.Date()
-	location := periodStart.Location()
-
-	// 计算下一个月
-	nextMonth := month + 1
-	nextYear := year
-	if nextMonth > 12 {
-		nextMonth = 1
-		nextYear++
-	}
-
-	// 处理月末日期(如2月没有31号)
-	lastDayOfMonth := time.Date(nextYear, nextMonth+1, 0, 0, 0, 0, 0, time.UTC).Day()
-	actualDay := resetDay
-	if resetDay > lastDayOfMonth {
-		actualDay = lastDayOfMonth
-	}
-
-	return time.Date(nextYear, nextMonth, actualDay, 0, 0, 0, 0, location)
-}
-
-// TrafficStats 流量统计信息
-type TrafficStats struct {
-	TrafficLimit       uint64        `json:"trafficLimit"`
-	TrafficUsed        uint64        `json:"trafficUsed"`
-	TrafficUsedPercent float64       `json:"trafficUsedPercent"`
-	TrafficRemaining   uint64        `json:"trafficRemaining"`
-	TrafficResetDay    int           `json:"trafficResetDay"`
-	PeriodStart        int64         `json:"periodStart"`
-	PeriodEnd          int64         `json:"periodEnd"`
-	DaysUntilReset     int           `json:"daysUntilReset"`
-	AlertsSent         TrafficAlerts `json:"alerts"`
-}
-
-// TrafficAlerts 流量告警状态
-type TrafficAlerts struct {
-	Sent80  bool `json:"sent80"`
-	Sent90  bool `json:"sent90"`
-	Sent100 bool `json:"sent100"`
 }

@@ -59,3 +59,8 @@ export const disableDDNSConfig = (id: string) => {
 export const getDDNSRecords = (id: string) => {
     return get<DDNSRecordListResponse>(`/admin/ddns/${id}/records`);
 };
+
+// 手动触发 DDNS 更新
+export const triggerDDNSUpdate = (id: string) => {
+    return post<{ message: string }>(`/admin/ddns/${id}/trigger`, {});
+};

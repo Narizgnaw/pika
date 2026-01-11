@@ -1,24 +1,24 @@
 import {createBrowserRouter, Navigate} from 'react-router-dom';
 import {type ComponentType, lazy, type LazyExoticComponent, Suspense} from 'react';
-import PrivateRoute from '../components/PrivateRoute';
+import PrivateRoute from '@admin/components/PrivateRoute';
 
-const LoginPage = lazy(() => import('../pages/Login'));
-const GitHubCallbackPage = lazy(() => import('../pages/Login/GitHubCallback'));
-const OIDCCallbackPage = lazy(() => import('../pages/Login/OIDCCallback'));
-const PublicLayout = lazy(() => import('../pages/PublicLayout'));
-const AdminLayout = lazy(() => import('../pages/AdminLayout'));
-const AgentListPage = lazy(() => import('../pages/Agents/AgentList'));
-const AgentDetailPage = lazy(() => import('../pages/Agents/AgentDetail'));
-const AgentInstallPage = lazy(() => import('../pages/Agents/AgentInstall'));
-const ApiKeyListPage = lazy(() => import('../pages/ApiKeys/ApiKeyList'));
-const SettingsPage = lazy(() => import('../pages/Settings'));
-const ServerListPage = lazy(() => import('../pages/Public/ServerList'));
-const ServerDetailPage = lazy(() => import('../pages/Public/ServerDetail'));
-const PublicMonitorListPage = lazy(() => import('../pages/Public/MonitorList'));
-const PublicMonitorDetailPage = lazy(() => import('../pages/Public/MonitorDetail'));
-const MonitorListPage = lazy(() => import('../pages/Monitors/MonitorList'));
-const DDNSPage = lazy(() => import('../pages/DDNS'));
-const AlertRecordListPage = lazy(() => import('../pages/AlertRecords'));
+const LoginPage = lazy(() => import('@admin/pages/Login'));
+const GitHubCallbackPage = lazy(() => import('@admin/pages/Login/GitHubCallback'));
+const OIDCCallbackPage = lazy(() => import('@admin/pages/Login/OIDCCallback'));
+const PublicLayout = lazy(() => import('@portal/pages/PublicLayout'));
+const AdminLayout = lazy(() => import('@admin/pages/AdminLayout'));
+const AgentListPage = lazy(() => import('@admin/pages/Agents/AgentList'));
+const AgentDetailPage = lazy(() => import('@admin/pages/Agents/AgentDetail'));
+const AgentInstallPage = lazy(() => import('@admin/pages/Agents/AgentInstall'));
+const ApiKeyListPage = lazy(() => import('@admin/pages/ApiKeys/ApiKeyList'));
+const SettingsPage = lazy(() => import('@admin/pages/Settings'));
+const ServerListPage = lazy(() => import('@portal/pages/ServerList.tsx'));
+const ServerDetailPage = lazy(() => import('@portal/pages/ServerDetail.tsx'));
+const PublicMonitorListPage = lazy(() => import('@portal/pages/MonitorList.tsx'));
+const PublicMonitorDetailPage = lazy(() => import('@portal/pages/MonitorDetail.tsx'));
+const MonitorListPage = lazy(() => import('@admin/pages/Monitors/MonitorList'));
+const DDNSPage = lazy(() => import('@admin/pages/DDNS'));
+const AlertRecordListPage = lazy(() => import('@admin/pages/AlertRecords'));
 
 const LoadingFallback = () => (
     <div className="flex min-h-[200px] w-full items-center justify-center text-gray-500">

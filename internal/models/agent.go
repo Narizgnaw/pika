@@ -1,6 +1,11 @@
 package models
 
-import "gorm.io/datatypes"
+import (
+	"net"
+	"strings"
+
+	"gorm.io/datatypes"
+)
 
 // Agent 探针信息
 type Agent struct {
@@ -15,19 +20,75 @@ type Agent struct {
 	ExpireTime int64                       `json:"expireTime"`                            // 到期时间（时间戳毫秒）
 	Status     int                         `json:"status"`                                // 状态: 0-离线, 1-在线
 	Visibility string                      `gorm:"default:public" json:"visibility"`      // 可见性: public-匿名可见, private-登录可见
+	Weight     int                         `gorm:"default:0;index" json:"weight"`         // 权重排序（数字越大越靠前）
+	Remark     string                      `json:"remark"`                                // 备注信息
 	LastSeenAt int64                       `gorm:"index" json:"lastSeenAt"`               // 最后上线时间（时间戳毫秒）
 	CreatedAt  int64                       `json:"createdAt"`                             // 创建时间（时间戳毫秒）
 	UpdatedAt  int64                       `json:"updatedAt" gorm:"autoUpdateTime:milli"` // 更新时间（时间戳毫秒）
 
 	// 流量统计相关字段
-	TrafficLimit        uint64 `json:"trafficLimit"`        // 流量限额(字节), 0表示不限制
-	TrafficUsed         uint64 `json:"trafficUsed"`         // 当前周期已使用流量(字节)
-	TrafficResetDay     int    `json:"trafficResetDay"`     // 流量重置日期(1-31), 0表示不自动重置
-	TrafficPeriodStart  int64  `json:"trafficPeriodStart"`  // 当前周期开始时间(时间戳毫秒)
-	TrafficBaselineRecv uint64 `json:"trafficBaselineRecv"` // 当前周期流量基线(BytesRecvTotal)
-	TrafficAlertSent80  bool   `json:"trafficAlertSent80"`  // 是否已发送80%告警
-	TrafficAlertSent90  bool   `json:"trafficAlertSent90"`  // 是否已发送90%告警
-	TrafficAlertSent100 bool   `json:"trafficAlertSent100"` // 是否已发送100%告警
+	TrafficStats datatypes.JSONType[TrafficStatsData] `json:"trafficStats,omitempty"` // 流量统计
+
+	// 防篡改保护配置
+	TamperProtectConfig datatypes.JSONType[TamperProtectConfigData] `json:"tamperProtectConfig,omitempty"` // 防篡改保护配置
+
+	// SSH登录监控配置
+	SSHLoginConfig datatypes.JSONType[SSHLoginConfigData] `json:"sshLoginConfig,omitempty"` // SSH登录监控配置
+}
+
+// TrafficStatsData 流量统计数据
+type TrafficStatsData struct {
+	Enabled      bool   `json:"enabled"`      // 是否启用
+	Type         string `json:"type"`         // 统计类型: "recv"进站, "send"出站, "both"全部
+	Limit        uint64 `json:"limit"`        // 流量限额(字节), 0表示不限制
+	Used         uint64 `json:"used"`         // 当前周期已使用流量(字节)
+	UsedOffset   uint64 `json:"usedOffset"`   // 基线调整使用偏移(字节)
+	ResetDay     int    `json:"resetDay"`     // 流量重置日期(1-31), 0表示不自动重置
+	PeriodStart  int64  `json:"periodStart"`  // 当前周期开始时间(时间戳毫秒)
+	BaselineRecv uint64 `json:"baselineRecv"` // 当前周期流量基线(BytesRecvTotal)
+	BaselineSend uint64 `json:"baselineSend"` // 当前周期流量基线(BytesSentTotal)
+	AlertSent80  bool   `json:"alertSent80"`  // 是否已发送80%告警
+	AlertSent90  bool   `json:"alertSent90"`  // 是否已发送90%告警
+	AlertSent100 bool   `json:"alertSent100"` // 是否已发送100%告警
+}
+
+// TamperProtectConfigData 防篡改保护配置数据
+type TamperProtectConfigData struct {
+	Enabled      bool     `json:"enabled"`                // 是否启用
+	Paths        []string `json:"paths"`                  // 受保护的目录列表
+	ApplyStatus  string   `json:"applyStatus,omitempty"`  // 配置应用状态: success/failed/pending
+	ApplyMessage string   `json:"applyMessage,omitempty"` // 应用结果消息
+}
+
+// SSHLoginConfigData SSH登录监控配置数据
+type SSHLoginConfigData struct {
+	Enabled      bool     `json:"enabled"`                // 是否启用
+	IPWhitelist  []string `json:"ipWhitelist,omitempty"`  // IP白名单，白名单中的IP只记录不发送通知，支持 IP 或 CIDR
+	ApplyStatus  string   `json:"applyStatus,omitempty"`  // 配置应用状态: success/failed/pending
+	ApplyMessage string   `json:"applyMessage,omitempty"` // 应用结果消息
+}
+
+func (r SSHLoginConfigData) IsIPWhitelisted(ip string) bool {
+	if len(r.IPWhitelist) == 0 {
+		return false
+	}
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return false
+	}
+	for _, whitelistIP := range r.IPWhitelist {
+		if whitelistIP == ip {
+			return true
+		}
+		// 检查是否为 CIDR 格式
+		if strings.Contains(whitelistIP, "/") {
+			_, ipNet, err := net.ParseCIDR(whitelistIP)
+			if err == nil && ipNet.Contains(parsedIP) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (Agent) TableName() string {
