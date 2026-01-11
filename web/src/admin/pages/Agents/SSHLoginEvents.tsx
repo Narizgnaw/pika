@@ -77,21 +77,6 @@ const SSHLoginEvents: React.FC<SSHLoginEventsProps> = ({agentId}) => {
             render: (_, record) => record.port || '-',
         },
         {
-            title: '认证方式',
-            dataIndex: 'method',
-            key: 'method',
-            width: 120,
-            hideInSearch: true,
-            render: (_, record) => (
-                record.method ? (
-                    <Tooltip
-                        title={record.method === 'password' ? '密码认证' : record.method === 'publickey' ? '公钥认证' : record.method}>
-                        <Tag>{record.method}</Tag>
-                    </Tooltip>
-                ) : '-'
-            ),
-        },
-        {
             title: 'TTY',
             dataIndex: 'tty',
             key: 'tty',

@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/dushixiang/pika/internal/protocol"
 )
 
 // SendEventFromEnv 从 PAM 环境变量构建并发送事件
@@ -19,7 +21,7 @@ func SendEventFromEnv() error {
 }
 
 // BuildEventFromEnv 从 PAM 环境变量构建事件
-func BuildEventFromEnv() SSHLoginEvent {
+func BuildEventFromEnv() protocol.SSHLoginEvent {
 	now := time.Now().UnixMilli()
 
 	username := os.Getenv("PAM_USER")
@@ -48,20 +50,19 @@ func BuildEventFromEnv() SSHLoginEvent {
 		ip = "localhost"
 	}
 
-	return SSHLoginEvent{
+	return protocol.SSHLoginEvent{
 		Username:  username,
 		IP:        ip,
 		Port:      port,
 		Timestamp: now,
 		Status:    "success",
-		Method:    "unknown",
 		TTY:       tty,
 		SessionID: strconv.Itoa(os.Getpid()),
 	}
 }
 
 // SendEvent 发送事件到本地 socket
-func SendEvent(event SSHLoginEvent) error {
+func SendEvent(event protocol.SSHLoginEvent) error {
 	addr := &net.UnixAddr{
 		Name: DefaultSocketPath,
 		Net:  "unixgram",

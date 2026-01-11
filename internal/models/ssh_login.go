@@ -7,8 +7,7 @@ type SSHLoginEvent struct {
 	Username  string `gorm:"index" json:"username"`         // 用户名
 	IP        string `gorm:"index" json:"ip"`               // 来源IP
 	Port      string `json:"port,omitempty"`                // 来源端口
-	Status    string `gorm:"index" json:"status"`           // 状态: success/failed
-	Method    string `json:"method,omitempty"`              // 认证方式: password/publickey
+	Status    string `gorm:"index" json:"status"`           // 状态: success
 	TTY       string `json:"tty,omitempty"`                 // 终端
 	SessionID string `json:"sessionId,omitempty"`           // 会话ID
 	Timestamp int64  `gorm:"index" json:"timestamp"`        // 登录时间（毫秒时间戳）

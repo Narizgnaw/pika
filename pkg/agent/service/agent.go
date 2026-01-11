@@ -925,22 +925,10 @@ func (a *Agent) sshLoginEventLoop(ctx context.Context, conn *safeConn, done chan
 		case <-ctx.Done():
 			return
 		case event := <-eventCh:
-			// 转换为 protocol 结构
-			eventData := protocol.SSHLoginEvent{
-				Username:  event.Username,
-				IP:        event.IP,
-				Port:      event.Port,
-				Timestamp: event.Timestamp,
-				Status:    event.Status,
-				Method:    event.Method,
-				TTY:       event.TTY,
-				SessionID: event.SessionID,
-			}
-
 			// 上报到服务端
 			if err := conn.WriteJSON(protocol.OutboundMessage{
 				Type: protocol.MessageTypeSSHLoginEvent,
-				Data: eventData,
+				Data: event,
 			}); err != nil {
 				slog.Warn("发送SSH登录事件失败", "error", err)
 			} else {

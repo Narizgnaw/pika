@@ -28,7 +28,7 @@ type Monitor struct {
 	listener    *net.UnixConn
 	ctx         context.Context
 	cancel      context.CancelFunc
-	eventCh     chan SSHLoginEvent
+	eventCh     chan protocol.SSHLoginEvent
 	hookManager *HookManager
 }
 
@@ -37,7 +37,7 @@ func NewMonitor() *Monitor {
 	return &Monitor{
 		enabled:     false,
 		socketPath:  DefaultSocketPath,
-		eventCh:     make(chan SSHLoginEvent, 100),
+		eventCh:     make(chan protocol.SSHLoginEvent, 100),
 		hookManager: NewHookManager(),
 	}
 }
@@ -124,7 +124,7 @@ func (m *Monitor) stopInternal() error {
 }
 
 // GetEvents 获取事件通道
-func (m *Monitor) GetEvents() <-chan SSHLoginEvent {
+func (m *Monitor) GetEvents() <-chan protocol.SSHLoginEvent {
 	return m.eventCh
 }
 
@@ -178,7 +178,7 @@ func (m *Monitor) readLoop() {
 			continue
 		}
 
-		var event SSHLoginEvent
+		var event protocol.SSHLoginEvent
 		if err := json.Unmarshal(buf[:n], &event); err != nil {
 			slog.Warn("解析SSH登录事件失败", "error", err)
 			continue

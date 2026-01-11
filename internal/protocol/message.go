@@ -701,7 +701,6 @@ type SSHLoginEvent struct {
 	Port      string `json:"port,omitempty"`      // 来源端口
 	Timestamp int64  `json:"timestamp"`           // 登录时间（毫秒时间戳）
 	Status    string `json:"status"`              // success/failed
-	Method    string `json:"method,omitempty"`    // 认证方式: password/publickey
 	TTY       string `json:"tty,omitempty"`       // 终端
 	SessionID string `json:"sessionId,omitempty"` // 会话ID
 }
