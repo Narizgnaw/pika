@@ -81,7 +81,6 @@ type Agent struct {
 	activeConn       *safeConn
 	collectorMu      sync.RWMutex
 	collectorManager *collector.Manager
-	outboundBuffer   *outboundBuffer
 	tamperProtector  *tamper.Protector
 	sshMonitor       *sshmonitor.Monitor
 }
@@ -92,7 +91,6 @@ func New(cfg *config.Config) *Agent {
 		cfg:              cfg,
 		idMgr:            id.NewManager(),
 		collectorManager: collector.NewManager(cfg),
-		outboundBuffer:   newOutboundBuffer(),
 		tamperProtector:  tamper.NewProtector(),
 		sshMonitor:       sshmonitor.NewMonitor(),
 	}
@@ -177,7 +175,7 @@ func (a *Agent) runOnce(ctx context.Context, onRegistered func()) error {
 	// 连接到服务器
 	rawConn, _, err := dialer.Dial(wsURL, nil)
 	if err != nil {
-		return fmt.Errorf("连接失败: %w", err)
+		return fmt.Errorf("connect failed: %w", err)
 	}
 	defer rawConn.Close()
 
@@ -185,7 +183,7 @@ func (a *Agent) runOnce(ctx context.Context, onRegistered func()) error {
 	conn := &safeConn{conn: rawConn}
 
 	if err := rawConn.SetReadDeadline(time.Now().Add(agentPongWait)); err != nil {
-		return fmt.Errorf("设置读取超时失败: %w", err)
+		return fmt.Errorf("set read deadline failed: %w", err)
 	}
 	rawConn.SetPongHandler(func(string) error {
 		return rawConn.SetReadDeadline(time.Now().Add(agentPongWait))
@@ -201,7 +199,7 @@ func (a *Agent) runOnce(ctx context.Context, onRegistered func()) error {
 
 	// 发送注册消息
 	if err := a.registerAgent(conn); err != nil {
-		return fmt.Errorf("注册失败: %w", err)
+		return fmt.Errorf("register failed: %w", err)
 	}
 	onRegistered()
 
@@ -223,7 +221,7 @@ func (a *Agent) runOnce(ctx context.Context, onRegistered func()) error {
 	wg.Go(func() {
 		if err := a.readLoop(rawConn, done); err != nil {
 			select {
-			case errChan <- fmt.Errorf("读取失败: %w", err):
+			case errChan <- fmt.Errorf("read failed: %w", err):
 			default:
 			}
 		}
@@ -233,7 +231,7 @@ func (a *Agent) runOnce(ctx context.Context, onRegistered func()) error {
 	wg.Go(func() {
 		if err := a.pingLoop(ctx, conn, done); err != nil {
 			select {
-			case errChan <- fmt.Errorf("ping失败: %w", err):
+			case errChan <- fmt.Errorf("ping failed: %w", err):
 			default:
 			}
 		}
@@ -346,7 +344,7 @@ func (a *Agent) registerAgent(conn *safeConn) error {
 	// 加载或生成探针 ID
 	agentID, err := a.idMgr.Load()
 	if err != nil {
-		return fmt.Errorf("加载 agent ID 失败: %w", err)
+		return fmt.Errorf("load agent ID failed: %w", err)
 	}
 	slog.Info("Agent ID", "id", agentID, "path", a.idMgr.GetPath())
 
@@ -379,31 +377,31 @@ func (a *Agent) registerAgent(conn *safeConn) error {
 		Type: protocol.MessageTypeRegister,
 		Data: registerReq,
 	}); err != nil {
-		return fmt.Errorf("发送注册消息失败: %w", err)
+		return fmt.Errorf("send register message failed: %w", err)
 	}
 
 	// 读取注册响应
 	var response protocol.InputMessage
 	if err := conn.ReadJSON(&response); err != nil {
-		return fmt.Errorf("读取注册响应失败: %w", err)
+		return fmt.Errorf("read register response failed: %w", err)
 	}
 
 	// 检查响应类型
 	if response.Type == protocol.MessageTypeRegisterErr {
 		var errResp protocol.RegisterResponse
 		if err := json.Unmarshal(response.Data, &errResp); err == nil {
-			return fmt.Errorf("注册失败: %s", errResp.Message)
+			return fmt.Errorf("register failed: %s", errResp.Message)
 		}
-		return fmt.Errorf("注册失败: 未知错误")
+		return fmt.Errorf("register failed: unknown error")
 	}
 
 	if response.Type != protocol.MessageTypeRegisterAck {
-		return fmt.Errorf("注册失败: 收到未知响应类型 %s", response.Type)
+		return fmt.Errorf("register failed: unexpected response type %s", response.Type)
 	}
 
 	var registerResp protocol.RegisterResponse
 	if err := json.Unmarshal(response.Data, &registerResp); err != nil {
-		return fmt.Errorf("解析注册响应失败: %w", err)
+		return fmt.Errorf("parse register response failed: %w", err)
 	}
 
 	slog.Info("注册成功", "agentId", registerResp.AgentID, "status", registerResp.Status)
@@ -432,14 +430,19 @@ func (a *Agent) handleMonitorConfig(data json.RawMessage) {
 
 	// 立即执行一次监控检测，结果以单元素 batch 上报
 	sample := manager.CollectMonitor(payload.Items)
-	writer := newOutboundWriter(a.getActiveConn(), a.outboundBuffer)
-	if err := writer.WriteJSON(protocol.OutboundMessage{
+	conn := a.getActiveConn()
+	if conn == nil {
+		slog.Warn("当前连接不可用，无法上报监控结果")
+		return
+	}
+
+	if err := conn.WriteJSON(protocol.OutboundMessage{
 		Type: protocol.MessageTypeMetrics,
 		Data: protocol.MetricsBatch{Samples: []protocol.MetricSample{sample}},
 	}); err != nil {
 		slog.Warn("发送监控结果失败", "error", err)
 	} else {
-		slog.Info("服务监控检测完成，已上报或缓存监控项结果", "count", len(payload.Items))
+		slog.Info("服务监控检测完成，已上报监控项结果", "count", len(payload.Items))
 	}
 }
 
@@ -455,23 +458,17 @@ func (a *Agent) getActiveConn() *safeConn {
 	return a.activeConn
 }
 
-func (a *Agent) sendOutboundMessage(msg protocol.OutboundMessage) (bool, error) {
+func (a *Agent) sendOutboundMessage(msg protocol.OutboundMessage) error {
 	conn := a.getActiveConn()
 	if conn == nil {
-		if err := a.outboundBuffer.Append(msg); err != nil {
-			return false, err
-		}
-		return true, nil
+		return fmt.Errorf("connection is unavailable")
 	}
 
 	if err := conn.WriteJSON(msg); err != nil {
-		if bufferErr := a.outboundBuffer.Append(msg); bufferErr != nil {
-			return false, fmt.Errorf("发送失败且写入缓存失败: %w", bufferErr)
-		}
-		return true, nil
+		return err
 	}
 
-	return false, nil
+	return nil
 }
 
 func (a *Agent) setCollectorManager(manager *collector.Manager) {
@@ -497,22 +494,21 @@ func (a *Agent) metricsLoop(ctx context.Context) {
 		a.setCollectorManager(manager)
 	}
 
-	// 立即采集一次（tick=0 时所有采集器都到期，等于全量采集）
 	var tickCount uint64
-	if err := a.collectAndSendAllMetrics(manager, tickCount); err != nil {
-		slog.Warn("初始数据采集失败", "error", err)
-	}
-
 	ticker := time.NewTicker(collectorBaseInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			tickCount++
+			if a.getActiveConn() == nil {
+				continue
+			}
+
 			if err := a.collectAndSendAllMetrics(manager, tickCount); err != nil {
 				slog.Warn("数据采集失败", "error", err)
 			}
+			tickCount++
 		case <-ctx.Done():
 			return
 		}
@@ -522,7 +518,7 @@ func (a *Agent) metricsLoop(ctx context.Context) {
 // collectAndSendAllMetrics 采集并发送所有动态指标
 func (a *Agent) collectAndSendAllMetrics(manager *collector.Manager, tickCount uint64) error {
 	if manager == nil {
-		return fmt.Errorf("采集器未初始化")
+		return fmt.Errorf("collector is not initialized")
 	}
 
 	type result struct {
@@ -538,7 +534,7 @@ func (a *Agent) collectAndSendAllMetrics(manager *collector.Manager, tickCount u
 	case r := <-done:
 		return r.err
 	case <-time.After(agentCollectTimeout):
-		return fmt.Errorf("指标采集超时 (超过 %v)", agentCollectTimeout)
+		return fmt.Errorf("metrics collection timed out after %v", agentCollectTimeout)
 	}
 }
 
@@ -566,13 +562,6 @@ type collectFn func() (protocol.MetricSample, error)
 // 各采集器按自身 interval 节流；本 tick 到期的采集器并行执行，避免串行累计耗时压垮 1s 节奏
 func (a *Agent) doCollectAndSend(manager *collector.Manager, tickCount uint64) error {
 	conn := a.getActiveConn()
-	if conn != nil {
-		if sent, err := a.outboundBuffer.Flush(conn); err != nil {
-			slog.Warn("发送缓存消息失败", "error", err)
-		} else if sent > 0 {
-			slog.Info("已发送缓存消息", "count", sent)
-		}
-	}
 
 	// required=true 时采集失败计入错误；required=false 适用于 GPU/温度等可选项
 	// interval 必须为 collectorBaseInterval 的整数倍
@@ -650,30 +639,23 @@ func (a *Agent) doCollectAndSend(manager *collector.Manager, tickCount uint64) e
 		samples = append(samples, r.sample)
 	}
 
-	writer := newOutboundWriter(conn, a.outboundBuffer)
-
 	if len(samples) > 0 {
-		if err := writer.WriteJSON(protocol.OutboundMessage{
+		if conn == nil {
+			return fmt.Errorf("connection is unavailable")
+		}
+
+		if err := conn.WriteJSON(protocol.OutboundMessage{
 			Type: protocol.MessageTypeMetrics,
 			Data: protocol.MetricsBatch{Samples: samples},
 		}); err != nil {
 			slog.Warn("发送指标 batch 失败", "error", err)
-			hasError = true
-		}
-	}
-
-	if writer.buffered {
-		if conn == nil {
-			slog.Info("当前连接不可用，消息已写入缓存")
-		} else if writer.sendErr != nil {
-			slog.Warn("发送消息失败，已写入缓存", "error", writer.sendErr)
 			// 连接写失败视为连接异常，返回错误触发重连
-			return fmt.Errorf("连接发送失败: %w", writer.sendErr)
+			return fmt.Errorf("connection send failed: %w", err)
 		}
 	}
 
 	if hasError {
-		return fmt.Errorf("部分指标采集失败")
+		return fmt.Errorf("some metrics collection failed")
 	}
 
 	return nil
@@ -738,7 +720,7 @@ func (a *Agent) sendCommandResponse(cmdID, cmdType, status, errMsg, result strin
 		Result: result,
 	}
 
-	if _, err := a.sendOutboundMessage(protocol.OutboundMessage{
+	if err := a.sendOutboundMessage(protocol.OutboundMessage{
 		Type: protocol.MessageTypeCommandResp,
 		Data: resp,
 	}); err != nil {
@@ -807,7 +789,7 @@ func (a *Agent) sendTamperProtectResponse(success bool, message string, paths []
 		Removed: removed,
 	}
 
-	if _, err := a.sendOutboundMessage(protocol.OutboundMessage{
+	if err := a.sendOutboundMessage(protocol.OutboundMessage{
 		Type: protocol.MessageTypeTamperProtect,
 		Data: resp,
 	}); err != nil {
@@ -835,14 +817,11 @@ func (a *Agent) tamperEventLoop(ctx context.Context, done chan struct{}) {
 				Details:   event.Details,
 			}
 
-			buffered, err := a.sendOutboundMessage(protocol.OutboundMessage{
+			if err := a.sendOutboundMessage(protocol.OutboundMessage{
 				Type: protocol.MessageTypeTamperEvent,
 				Data: eventData,
-			})
-			if err != nil {
+			}); err != nil {
 				slog.Warn("发送防篡改事件失败", "error", err)
-			} else if buffered {
-				slog.Info("防篡改事件已缓存", "path", event.Path, "operation", event.Operation)
 			} else {
 				slog.Info("已上报防篡改事件", "path", event.Path, "operation", event.Operation)
 			}
@@ -856,18 +835,11 @@ func (a *Agent) tamperEventLoop(ctx context.Context, done chan struct{}) {
 				Restored:  alert.Restored,
 			}
 
-			buffered, err := a.sendOutboundMessage(protocol.OutboundMessage{
+			if err := a.sendOutboundMessage(protocol.OutboundMessage{
 				Type: protocol.MessageTypeTamperEvent,
 				Data: eventData,
-			})
-			if err != nil {
+			}); err != nil {
 				slog.Warn("发送防篡改告警失败", "error", err)
-			} else if buffered {
-				status := "未恢复"
-				if alert.Restored {
-					status = "已恢复"
-				}
-				slog.Info("防篡改告警已缓存", "path", alert.Path, "status", status)
 			} else {
 				status := "未恢复"
 				if alert.Restored {
@@ -904,7 +876,7 @@ func (a *Agent) handleDDNSConfig(data json.RawMessage) {
 	if err := a.collectAndSendDDNSIP(manager, &ddnsConfig); err != nil {
 		slog.Warn("DDNS IP 采集失败", "error", err)
 	} else {
-		slog.Info("DDNS IP 地址已上报或缓存")
+		slog.Info("DDNS IP 地址已上报")
 	}
 }
 
@@ -953,7 +925,7 @@ func (a *Agent) handlePublicIPConfig(data json.RawMessage) {
 		return
 	}
 
-	if _, err := a.sendOutboundMessage(protocol.OutboundMessage{
+	if err := a.sendOutboundMessage(protocol.OutboundMessage{
 		Type: protocol.MessageTypePublicIPReport,
 		Data: report,
 	}); err != nil {
@@ -973,7 +945,7 @@ func (a *Agent) getPublicIPFromAPIs(manager *collector.Manager, apis []string, i
 			continue
 		}
 		if !strings.HasPrefix(api, "http://") && !strings.HasPrefix(api, "https://") {
-			lastErr = fmt.Errorf("非法 API 地址: %s", api)
+			lastErr = fmt.Errorf("invalid API URL: %s", api)
 			continue
 		}
 		ip, err := manager.GetPublicIP(api, isIPv6)
@@ -986,7 +958,7 @@ func (a *Agent) getPublicIPFromAPIs(manager *collector.Manager, apis []string, i
 	if lastErr != nil {
 		return "", lastErr
 	}
-	return "", fmt.Errorf("未能获取公网 IP 地址")
+	return "", fmt.Errorf("failed to get public IP address")
 }
 
 // collectAndSendDDNSIP 采集并发送 DDNS IP 地址
@@ -1017,14 +989,14 @@ func (a *Agent) collectAndSendDDNSIP(manager *collector.Manager, config *protoco
 
 	// 如果没有获取到任何 IP，返回错误
 	if ipReport.IPv4 == "" && ipReport.IPv6 == "" {
-		return fmt.Errorf("未获取到任何 IP 地址")
+		return fmt.Errorf("no IP address was collected")
 	}
 
-	if _, err := a.sendOutboundMessage(protocol.OutboundMessage{
+	if err := a.sendOutboundMessage(protocol.OutboundMessage{
 		Type: protocol.MessageTypeDDNSIPReport,
 		Data: ipReport,
 	}); err != nil {
-		return fmt.Errorf("发送 IP 报告失败: %w", err)
+		return fmt.Errorf("send IP report failed: %w", err)
 	}
 
 	return nil
@@ -1040,7 +1012,7 @@ func (a *Agent) getIPAddress(manager *collector.Manager, method, value string, i
 		// 从网络接口获取 IP
 		return manager.GetInterfaceIP(value, isIPv6)
 	default:
-		return "", fmt.Errorf("不支持的 IP 获取方式: %s", method)
+		return "", fmt.Errorf("unsupported IP get method: %s", method)
 	}
 }
 
@@ -1112,7 +1084,7 @@ func (a *Agent) sendSSHLoginConfigResult(success bool, enabled bool, message str
 		Data: result,
 	}
 
-	if _, err := a.sendOutboundMessage(msg); err != nil {
+	if err := a.sendOutboundMessage(msg); err != nil {
 		slog.Warn("发送SSH登录监控配置应用结果失败", "error", err)
 	}
 }
@@ -1129,14 +1101,11 @@ func (a *Agent) sshLoginEventLoop(ctx context.Context, done chan struct{}) {
 			return
 		case event := <-eventCh:
 			// 上报到服务端
-			buffered, err := a.sendOutboundMessage(protocol.OutboundMessage{
+			if err := a.sendOutboundMessage(protocol.OutboundMessage{
 				Type: protocol.MessageTypeSSHLoginEvent,
 				Data: event,
-			})
-			if err != nil {
+			}); err != nil {
 				slog.Warn("发送SSH登录事件失败", "error", err)
-			} else if buffered {
-				slog.Info("SSH登录事件已缓存", "user", event.Username, "ip", event.IP, "status", event.Status)
 			} else {
 				slog.Info("已上报SSH登录事件", "user", event.Username, "ip", event.IP, "status", event.Status)
 			}
