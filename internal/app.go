@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -21,8 +22,8 @@ import (
 	"github.com/go-errors/errors"
 	"github.com/go-orz/orz"
 	"github.com/go-playground/validator/v10"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -122,13 +123,6 @@ func setupApi(app *orz.App, components *AppComponents) error {
 
 	e.Use(middleware.Recover())
 	e.Use(ErrorHandler(logger))
-	e.Use(middleware.RecoverWithConfig(middleware.RecoverConfig{
-		LogErrorFunc: func(c echo.Context, err error, stack []byte) error {
-			sugar := logger.Named("[PANIC RECOVER]").Sugar()
-			sugar.Error(fmt.Sprintf("%v %s\n", err, stack))
-			return err
-		},
-	}))
 
 	webDir := assets.WebDir()
 	if err := assets.RenderUIFilesInDir(webDir, components.PropertyService); err != nil {
@@ -137,7 +131,7 @@ func setupApi(app *orz.App, components *AppComponents) error {
 
 	// 静态文件服务
 	e.Use(middleware.StaticWithConfig(middleware.StaticConfig{
-		Skipper: func(c echo.Context) bool {
+		Skipper: func(c *echo.Context) bool {
 			// 不处理接口
 			if strings.HasPrefix(c.Request().RequestURI, "/api") {
 				return true
@@ -152,11 +146,12 @@ func setupApi(app *orz.App, components *AppComponents) error {
 			}
 			return false
 		},
+		Root:       ".",
 		Index:      "index.html",
 		HTML5:      true,
 		Browse:     false,
 		IgnoreBase: false,
-		Filesystem: http.Dir(webDir),
+		Filesystem: os.DirFS(webDir),
 	}))
 
 	customValidator := CustomValidator{Validator: validator.New()}
@@ -209,7 +204,7 @@ func setupApi(app *orz.App, components *AppComponents) error {
 	adminApi := e.Group("/api/admin")
 	adminApi.Use(UnifiedAuthMiddleware(components.AccountHandler, components.ApiKeyService))
 	{
-		adminApi.GET("/version", func(c echo.Context) error {
+		adminApi.GET("/version", func(c *echo.Context) error {
 			return c.JSON(http.StatusOK, orz.Map{
 				"version":      version.GetVersion(),
 				"agentVersion": version.GetAgentVersion(),
@@ -334,7 +329,7 @@ func initDefaultProperties(ctx context.Context, components *AppComponents, logge
 
 func ErrorHandler(logger *zap.Logger) func(next echo.HandlerFunc) echo.HandlerFunc {
 	var a = func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			if err := next(c); err != nil {
 				var he *echo.HTTPError
 				if errors.As(err, &he) {
@@ -479,7 +474,7 @@ func startAgentExpireCheck(ctx context.Context, components *AppComponents, logge
 // JWTAuthMiddleware JWT 认证中间件（必须登录）
 func JWTAuthMiddleware(accountHandler *handler.AccountHandler) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			// 从 Authorization header 获取 token
 			authHeader := c.Request().Header.Get("Authorization")
 			if authHeader == "" {
@@ -513,7 +508,7 @@ func JWTAuthMiddleware(accountHandler *handler.AccountHandler) echo.MiddlewareFu
 // OptionalJWTAuthMiddleware 可选 JWT 认证中间件（尝试解析 token，但不强制要求）
 func OptionalJWTAuthMiddleware(accountHandler *handler.AccountHandler) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			// 从 Authorization header 获取 token
 			authHeader := c.Request().Header.Get("Authorization")
 			if authHeader != "" {
@@ -542,7 +537,7 @@ func OptionalJWTAuthMiddleware(accountHandler *handler.AccountHandler) echo.Midd
 // APIKeyAuthMiddleware 使用 API Key 进行认证
 func APIKeyAuthMiddleware(apiKeyService *service.ApiKeyService) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			authHeader := c.Request().Header.Get("Authorization")
 			if authHeader == "" {
 				return echo.NewHTTPError(http.StatusUnauthorized, "未提供认证令牌")
@@ -567,7 +562,7 @@ func APIKeyAuthMiddleware(apiKeyService *service.ApiKeyService) echo.MiddlewareF
 // UnifiedAuthMiddleware 统一认证中间件：优先尝试 JWT Token，失败后尝试 API Key
 func UnifiedAuthMiddleware(accountHandler *handler.AccountHandler, apiKeyService *service.ApiKeyService) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c *echo.Context) error {
 			authHeader := c.Request().Header.Get("Authorization")
 			if authHeader == "" {
 				return echo.NewHTTPError(http.StatusUnauthorized, "未提供认证令牌")
