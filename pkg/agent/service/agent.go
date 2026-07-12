@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -81,6 +80,7 @@ type Agent struct {
 	activeConn       *safeConn
 	collectorMu      sync.RWMutex
 	collectorManager *collector.Manager
+	metricsStore     *metricsStore
 	tamperProtector  *tamper.Protector
 	sshMonitor       *sshmonitor.Monitor
 }
@@ -91,6 +91,7 @@ func New(cfg *config.Config) *Agent {
 		cfg:              cfg,
 		idMgr:            id.NewManager(),
 		collectorManager: collector.NewManager(cfg),
+		metricsStore:     newMetricsStore(),
 		tamperProtector:  tamper.NewProtector(),
 		sshMonitor:       sshmonitor.NewMonitor(),
 	}
@@ -102,7 +103,9 @@ func (a *Agent) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	a.cancel = cancel
 
-	go a.metricsLoop(ctx)
+	// 采集与发送解耦：采集永远运行（断线也写快照），发送独立读快照上报
+	go a.collectLoop(ctx)
+	go a.sendLoop(ctx)
 
 	// 启动探针主循环
 	b := &backoff.Backoff{
@@ -206,6 +209,9 @@ func (a *Agent) runOnce(ctx context.Context, onRegistered func()) error {
 	slog.Info("探针注册成功，开始监控...")
 
 	a.setActiveConn(conn)
+	// 重置发送游标，使下一个 sendLoop tick 立即发送当前全量快照，
+	// 保证重连瞬间服务端就能拿到最新数据
+	a.metricsStore.reset()
 	defer func() {
 		a.setActiveConn(nil)
 	}()
@@ -483,16 +489,19 @@ func (a *Agent) getCollectorManager() *collector.Manager {
 	return a.collectorManager
 }
 
-// collectorBaseInterval 采集循环的基础节奏，所有采集器的采集间隔必须是它的整数倍
-const collectorBaseInterval = 1 * time.Second
+// metricsSendInterval 指标发送循环的节奏，独立于采集节奏
+const metricsSendInterval = 1 * time.Second
 
-// metricsLoop 指标采集循环
-func (a *Agent) metricsLoop(ctx context.Context) {
+// collectLoop 指标采集循环：只采集写快照，不关心连接状态。
+// 断线期间采集持续运行，避免重连后数据出现空洞。
+func (a *Agent) collectLoop(ctx context.Context) {
 	manager := a.getCollectorManager()
 	if manager == nil {
 		manager = collector.NewManager(a.cfg)
 		a.setCollectorManager(manager)
 	}
+	// 采集器表只构造一次，后续每个 tick 复用
+	scheduler := newMetricsScheduler(manager)
 
 	var tickCount uint64
 	ticker := time.NewTicker(collectorBaseInterval)
@@ -501,13 +510,7 @@ func (a *Agent) metricsLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			if a.getActiveConn() == nil {
-				continue
-			}
-
-			if err := a.collectAndSendAllMetrics(manager, tickCount); err != nil {
-				slog.Warn("数据采集失败", "error", err)
-			}
+			a.collectOnce(scheduler, tickCount)
 			tickCount++
 		case <-ctx.Done():
 			return
@@ -515,150 +518,64 @@ func (a *Agent) metricsLoop(ctx context.Context) {
 	}
 }
 
-// collectAndSendAllMetrics 采集并发送所有动态指标
-func (a *Agent) collectAndSendAllMetrics(manager *collector.Manager, tickCount uint64) error {
-	if manager == nil {
-		return fmt.Errorf("collector is not initialized")
-	}
-
-	type result struct {
-		err error
-	}
-	done := make(chan result, 1)
-
+// collectOnce 在超时保护下采集本 tick 到期的指标并写入快照存储。
+func (a *Agent) collectOnce(scheduler *metricsScheduler, tickCount uint64) {
+	done := make(chan struct{})
 	go func() {
-		done <- result{err: a.doCollectAndSend(manager, tickCount)}
+		defer close(done)
+		samples, hasError := scheduler.collect(tickCount)
+		if len(samples) > 0 {
+			a.metricsStore.put(samples)
+		}
+		if hasError {
+			slog.Warn("部分指标采集失败")
+		}
 	}()
 
 	select {
-	case r := <-done:
-		return r.err
+	case <-done:
 	case <-time.After(agentCollectTimeout):
-		return fmt.Errorf("metrics collection timed out after %v", agentCollectTimeout)
+		slog.Warn("数据采集超时", "timeout", agentCollectTimeout)
 	}
 }
 
-// collectTimer 采集耗时计时器，记录每个采集器的耗时
-type collectTimer struct {
-	name  string
-	start time.Time
-}
+// sendLoop 指标发送循环：独立于采集，定时读取快照发送"新采集"的样本。
+func (a *Agent) sendLoop(ctx context.Context) {
+	ticker := time.NewTicker(metricsSendInterval)
+	defer ticker.Stop()
 
-func newCollectTimer(name string) *collectTimer {
-	return &collectTimer{name: name, start: time.Now()}
-}
-
-func (t *collectTimer) done() {
-	d := time.Since(t.start)
-	if d > 1500*time.Millisecond {
-		slog.Info("采集耗时", "collector", t.name, "duration", d)
+	for {
+		select {
+		case <-ticker.C:
+			a.sendMetricsOnce()
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
-// collectFn 单个采集器的采集函数签名
-type collectFn func() (protocol.MetricSample, error)
-
-// doCollectAndSend 采集所有动态指标，打包成一个 batch 上报
-// 各采集器按自身 interval 节流；本 tick 到期的采集器并行执行，避免串行累计耗时压垮 1s 节奏
-func (a *Agent) doCollectAndSend(manager *collector.Manager, tickCount uint64) error {
+// sendMetricsOnce 发送快照中比上次更新的样本；无连接或无新数据时跳过。
+func (a *Agent) sendMetricsOnce() {
 	conn := a.getActiveConn()
-
-	// required=true 时采集失败计入错误；required=false 适用于 GPU/温度等可选项
-	// interval 必须为 collectorBaseInterval 的整数倍
-	collectors := []struct {
-		name     string
-		required bool
-		interval time.Duration
-		fn       collectFn
-	}{
-		{"cpu", true, 1 * time.Second, manager.CollectCPU},
-		{"memory", true, 1 * time.Second, manager.CollectMemory},
-		{"disk_io", true, 1 * time.Second, manager.CollectDiskIO},
-		{"network", true, 1 * time.Second, manager.CollectNetwork},
-		{"gpu", false, 1 * time.Second, manager.CollectGPU},
-		{"network_connection", true, 1 * time.Second, manager.CollectNetworkConnection},
-		{"temperature", false, 5 * time.Second, manager.CollectTemperature},
-		{"disk", true, 30 * time.Second, manager.CollectDisk},
-		{"host", true, 60 * time.Second, manager.CollectHost},
+	if conn == nil {
+		return
 	}
 
-	type collectResult struct {
-		name     string
-		required bool
-		sample   protocol.MetricSample
-		err      error
+	samples, cursor := a.metricsStore.pending()
+	if len(samples) == 0 {
+		return
 	}
 
-	// 收集本 tick 到期的采集器
-	due := make([]int, 0, len(collectors))
-	for i, c := range collectors {
-		every := uint64(c.interval / collectorBaseInterval)
-		if every == 0 || tickCount%every != 0 {
-			continue
-		}
-		due = append(due, i)
+	if err := conn.WriteJSON(protocol.OutboundMessage{
+		Type: protocol.MessageTypeMetrics,
+		Data: protocol.MetricsBatch{Samples: samples},
+	}); err != nil {
+		slog.Warn("发送指标 batch 失败", "error", err)
+		// 连接写失败仅用于日志，重连由 readLoop/pingLoop 驱动
+		return
 	}
 
-	results := make(chan collectResult, len(due))
-	var wg sync.WaitGroup
-	for _, idx := range due {
-		c := collectors[idx]
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("采集器 panic", "collector", c.name, "panic", r)
-					results <- collectResult{name: c.name, required: c.required, err: fmt.Errorf("panic: %v", r)}
-				}
-			}()
-			t := newCollectTimer(c.name)
-			sample, err := c.fn()
-			t.done()
-			results <- collectResult{name: c.name, required: c.required, sample: sample, err: err}
-		}()
-	}
-	wg.Wait()
-	close(results)
-
-	samples := make([]protocol.MetricSample, 0, len(due))
-	var hasError bool
-	for r := range results {
-		if r.err != nil {
-			if errors.Is(r.err, collector.ErrNoData) {
-				continue
-			}
-			if r.required {
-				slog.Warn("采集指标失败", "collector", r.name, "error", r.err)
-				hasError = true
-			} else {
-				slog.Info("采集可选指标失败", "collector", r.name, "error", r.err)
-			}
-			continue
-		}
-		samples = append(samples, r.sample)
-	}
-
-	if len(samples) > 0 {
-		if conn == nil {
-			return fmt.Errorf("connection is unavailable")
-		}
-
-		if err := conn.WriteJSON(protocol.OutboundMessage{
-			Type: protocol.MessageTypeMetrics,
-			Data: protocol.MetricsBatch{Samples: samples},
-		}); err != nil {
-			slog.Warn("发送指标 batch 失败", "error", err)
-			// 连接写失败视为连接异常，返回错误触发重连
-			return fmt.Errorf("connection send failed: %w", err)
-		}
-	}
-
-	if hasError {
-		return fmt.Errorf("some metrics collection failed")
-	}
-
-	return nil
+	a.metricsStore.ack(cursor)
 }
 
 // handleCommand 处理服务端下发的指令
