@@ -2,17 +2,18 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
 
 	"github.com/dushixiang/pika/pkg/agent"
 	"github.com/dushixiang/pika/pkg/agent/config"
-	"github.com/dushixiang/pika/pkg/agent/id"
 	"github.com/dushixiang/pika/pkg/agent/sshmonitor"
 	"github.com/dushixiang/pika/pkg/agent/sysutil"
 	"github.com/dushixiang/pika/pkg/agent/updater"
@@ -353,19 +354,41 @@ func UninstallAgent(cfgPath string) error {
 
 	// 清理 SSH 监控配置
 	monitor := sshmonitor.NewMonitor()
-	if err := monitor.Stop(); err != nil {
-		slog.Warn("清理SSH监控配置失败", "error", err)
+	return cleanupAgentArtifacts(cfgPath, monitor.Uninstall)
+}
+
+func cleanupAgentArtifacts(cfgPath string, uninstallSSHMonitor func() error) error {
+	var cleanupErr error
+
+	if err := uninstallSSHMonitor(); err != nil {
+		cleanupErr = errors.Join(cleanupErr, fmt.Errorf("uninstall SSH monitor failed: %w", err))
 	}
 
-	// 删除配置文件
-	if err := os.Remove(cfgPath); err != nil {
-		slog.Warn("删除配置文件失败", "error", err)
+	// SSH 清理失败不应阻止配置、ID、日志和历史缓存的删除。
+	if err := removeAgentData(cfgPath); err != nil {
+		cleanupErr = errors.Join(cleanupErr, fmt.Errorf("remove agent data failed: %w", err))
 	}
 
-	// 删除探针 ID 文件
-	idPath := id.GetIDFilePath()
-	if err := os.Remove(idPath); err != nil {
-		slog.Warn("删除探针 ID 文件失败", "error", err)
+	return cleanupErr
+}
+
+func removeAgentData(cfgPath string) error {
+	if cfgPath == "" {
+		cfgPath = config.GetDefaultConfigPath()
+	}
+
+	dataDir := filepath.Clean(config.GetDataDir())
+	cleanCfgPath := filepath.Clean(cfgPath)
+
+	// 自定义配置可能位于数据目录之外，只删除配置文件本身。
+	if cleanCfgPath != dataDir && !strings.HasPrefix(cleanCfgPath, dataDir+string(os.PathSeparator)) {
+		if err := os.Remove(cleanCfgPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove config file %s: %w", cleanCfgPath, err)
+		}
+	}
+
+	if err := os.RemoveAll(dataDir); err != nil {
+		return fmt.Errorf("remove data directory %s: %w", dataDir, err)
 	}
 
 	return nil
