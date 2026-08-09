@@ -15,15 +15,7 @@ cd portal && npm ci && npm run dev   # 默认主题，http://localhost:5173/
 
 ## 构建
 
-`make build-web` 分别构建 `web/`（管理后台）和 `portal/`（默认主题），再由 `web/scripts/assemble-web.mjs` 组装、`verify-dist.mjs` 校验以下产物：
-
-```text
-web/dist/admin/index.html
-web/dist/admin/assets/*
-web/dist/default-theme/pika-theme.json
-web/dist/default-theme/dist/index.html
-web/dist/default-theme/dist/assets/*
-```
+`make build-web` 分别构建 `web/`（管理后台 → `web/dist/admin/`）和 `portal/`（默认主题 → `portal/dist/`）。后端直接从这两个目录读取，无需组装脚本。
 
 ## 运行路径
 

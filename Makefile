@@ -23,8 +23,6 @@ build-web:
 	npm run build --prefix web
 	npm ci --prefix portal
 	npm run build --prefix portal
-	node web/scripts/assemble-web.mjs
-	node web/scripts/verify-dist.mjs
 
 # 构建服务端（开发）
 build-server:
@@ -76,7 +74,7 @@ build-release:
 # 清理编译产物
 clean:
 	rm -rf bin/*
-	rm -rf web/dist web/.dist portal/dist
+	rm -rf web/dist portal/dist
 
 # 运行测试
 test:

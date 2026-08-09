@@ -12,7 +12,7 @@ export default defineConfig({
         '@admin': path.resolve(__dirname, './src/admin'),
     }},
     build: {
-        outDir: path.resolve(__dirname, '.dist'),
+        outDir: path.resolve(__dirname, 'dist/admin'),
         emptyOutDir: true,
         assetsDir: 'assets',
     },

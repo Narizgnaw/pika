@@ -123,7 +123,7 @@ func NewThemeService(logger *zap.Logger, propertyService *PropertyService, cfg *
 		logger:          logger,
 		propertyService: propertyService,
 		themeDir:        themeDir,
-		defaultThemeDir: filepath.Join(assets.WebDir(), "default-theme"),
+		defaultThemeDir: "portal",
 	}
 	if err := os.MkdirAll(filepath.Join(themeDir, ".staging"), 0755); err != nil {
 		return nil, fmt.Errorf("创建主题目录失败: %w", err)
