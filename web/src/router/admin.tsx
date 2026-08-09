@@ -5,7 +5,7 @@ import PrivateRoute from '@/components/PrivateRoute';
 const LoginPage = lazy(() => import('@/pages/Login'));
 const GitHubCallbackPage = lazy(() => import('@/pages/Login/GitHubCallback'));
 const OIDCCallbackPage = lazy(() => import('@/pages/Login/OIDCCallback'));
-const AdminLayout = lazy(() => import('@/pages/AdminLayout'));
+const AdminLayout = lazy(() => import('@/layouts/AdminLayout'));
 const AgentListPage = lazy(() => import('@/pages/Agents/AgentList'));
 const AgentDetailPage = lazy(() => import('@/pages/Agents/AgentDetail'));
 const AgentInstallOneClickPage = lazy(() => import('@/pages/Agents/AgentInstallOneClick'));

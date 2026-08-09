@@ -7,7 +7,7 @@ import {deleteApiKey, disableApiKey, enableApiKey, getApiKeyRaw, listApiKeys} fr
 import type {ApiKey} from '@/types';
 import dayjs from 'dayjs';
 import {getErrorMessage} from '@/lib/utils';
-import {PageHeader} from '@/components';
+import {PageHeader} from '@/components/PageHeader';
 import copy from 'copy-to-clipboard';
 import ApiKeyModal from './ApiKeyModal';
 import ShowApiKeyModal from './ShowApiKeyModal';

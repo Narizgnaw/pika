@@ -4,11 +4,13 @@ import { App, Button, ConfigProvider, Form, Input, theme } from 'antd';
 import { GithubOutlined, GlobalOutlined, LockOutlined, UserOutlined } from '@ant-design/icons';
 import { Moon, Sun } from 'lucide-react';
 import { getAuthConfig, getGitHubAuthURL, getOIDCAuthURL, login } from '@/api/auth.ts';
+import {useRuntimeConfig} from '@/api/runtime';
 import type { LoginRequest } from '@/types';
 import { useColorMode } from '@/shared/contexts/ColorModeContext';
 import { flushSync } from 'react-dom';
 
 const Login = () => {
+    const {data: runtime} = useRuntimeConfig();
     const [loading, setLoading] = useState(false);
     const [oidcEnabled, setOidcEnabled] = useState(false);
     const [githubEnabled, setGithubEnabled] = useState(false);
@@ -147,7 +149,7 @@ const Login = () => {
                     {/* 头部：品牌名称 */}
                     <div className="mb-10 text-center">
                         <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-zinc-100">
-                            {window.SystemConfig.SystemNameZh}
+                            {runtime?.system.nameZh || '皮卡监控'}
                         </h1>
                     </div>
 

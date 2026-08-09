@@ -4,6 +4,7 @@ import type {MenuProps} from 'antd';
 import {App as AntApp, Avatar, Button, Dropdown, Space} from 'antd';
 import {BookOpen, Eye, LogOut, Moon, Sun, User as UserIcon} from 'lucide-react';
 import {logout} from '@/api/auth';
+import {useRuntimeConfig} from '@/api/runtime';
 import type {User} from '@/types';
 
 interface HeaderProps {
@@ -16,6 +17,7 @@ interface HeaderProps {
 export const AdminHeader = ({userInfo, appliedTheme, themeButtonRef, onToggleTheme}: HeaderProps) => {
     const navigate = useNavigate();
     const {message: messageApi, modal} = AntApp.useApp();
+    const {data: runtime} = useRuntimeConfig();
 
     const handleLogout = () => {
         modal.confirm({
@@ -51,7 +53,7 @@ export const AdminHeader = ({userInfo, appliedTheme, themeButtonRef, onToggleThe
                         />
                     </div>
                     <div>
-                        <p className="text-xs uppercase tracking-[0.3em] text-white/60">{window.SystemConfig?.SystemNameZh}</p>
+                        <p className="text-xs uppercase tracking-[0.3em] text-white/60">{runtime?.system.nameZh}</p>
                         <p className="text-sm font-semibold">控制台</p>
                     </div>
                 </div>

@@ -25,16 +25,7 @@ const SystemConfigComponent = () => {
         mutationFn: saveSystemConfig,
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: ['systemConfig'] });
-            try {
-                const response = await fetch('/api/config');
-                if (response.ok) {
-                    const runtime = await response.json();
-                    window.PikaRuntime = runtime;
-                    window.SystemConfig = runtime.legacySystemConfig;
-                }
-            } catch {
-                // 管理界面不依赖这次刷新成功；公开页面刷新后仍会读取最新配置。
-            }
+            await queryClient.invalidateQueries({ queryKey: ['runtime-config'] });
             messageApi.success('保存成功，公开页面刷新后生效');
         },
         onError: (error: unknown) => {

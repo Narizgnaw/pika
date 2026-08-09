@@ -3,7 +3,7 @@ import {useSearchParams} from 'react-router-dom';
 import {App, Button, Divider, Dropdown, Input, Space, Table, Tag, Tooltip} from 'antd';
 import type {ColumnsType} from 'antd/es/table';
 import type {MenuProps} from 'antd';
-import {PageHeader} from '@/components';
+import {PageHeader} from '@/components/PageHeader';
 import {Globe, MoreVertical, Plus, Settings} from 'lucide-react';
 import dayjs from 'dayjs';
 import type {DDNSConfig} from '@/types';

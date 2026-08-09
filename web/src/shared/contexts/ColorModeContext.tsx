@@ -1,4 +1,5 @@
 import {createContext, useContext, useEffect, useState, type ReactNode} from 'react';
+import {useRuntimeConfig} from '@/api/runtime';
 
 export type ColorMode = 'light' | 'dark' | 'system';
 export type ResolvedColorMode = 'light' | 'dark';
@@ -12,12 +13,22 @@ interface ColorModeContextValue {
 const ColorModeContext = createContext<ColorModeContextValue | undefined>(undefined);
 
 export const ColorModeProvider = ({children}: {children: ReactNode}) => {
+    const {data: runtime} = useRuntimeConfig();
     const [colorMode, setColorModeState] = useState<ColorMode>(() => {
         const saved = localStorage.getItem('colorMode') || localStorage.getItem('theme');
         if (saved === 'auto') return 'system';
         if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
-        return window.PikaRuntime?.system?.defaultColorMode || 'system';
+        return 'system';
     });
+
+    // 运行时配置加载后，如果用户没有本地偏好，使用服务端默认值
+    useEffect(() => {
+        if (!runtime) return;
+        const saved = localStorage.getItem('colorMode') || localStorage.getItem('theme');
+        if (!saved) {
+            setColorModeState(runtime.system.defaultColorMode);
+        }
+    }, [runtime]);
     const [resolvedColorMode, setResolvedColorMode] = useState<ResolvedColorMode>('dark');
 
     const setColorMode = (mode: ColorMode) => {

@@ -5,7 +5,7 @@ import NotificationChannels from './NotificationChannels';
 import SystemConfig from './SystemConfig';
 import PublicIPConfig from './PublicIPConfig';
 import ThemeSettings from './ThemeSettings';
-import {PageHeader} from "@/components";
+import {PageHeader} from "@/components/PageHeader";
 import {useSearchParams} from "react-router-dom";
 
 // 默认 IPv4 API 列表

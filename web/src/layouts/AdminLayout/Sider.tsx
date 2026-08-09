@@ -1,11 +1,13 @@
 import {useLocation, useNavigate} from 'react-router-dom';
 import {menuItems, SIDEBAR_WIDTH, HEADER_HEIGHT} from './menu';
 import {cn} from '@/lib/utils';
+import {useRuntimeConfig} from '@/api/runtime';
 import type {VersionInfo} from '@/api/version';
 
 export const AdminSider = ({version}: {version?: VersionInfo}) => {
     const location = useLocation();
     const navigate = useNavigate();
+    const {data: runtime} = useRuntimeConfig();
 
     return (
         <aside
@@ -52,7 +54,7 @@ export const AdminSider = ({version}: {version?: VersionInfo}) => {
                             <div className="mt-2">
                                 <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">Server: {version.version}</p>
                                 <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">Agent: {version.agentVersion}</p>
-                                <p className="text-[11px] text-gray-500 dark:text-slate-400 uppercase tracking-[0.1em]">{window.SystemConfig?.SystemNameEn}</p>
+                                <p className="text-[11px] text-gray-500 dark:text-slate-400 uppercase tracking-[0.1em]">{runtime?.system.nameEn}</p>
                             </div>
                         </div>
                     </div>
