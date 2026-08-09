@@ -17,7 +17,6 @@ ARG TARGETARCH
 COPY ./bin/pika-linux-${TARGETARCH} ./pika
 COPY ./bin/agents ./bin/agents
 COPY ./web/dist ./web/dist
-COPY ./web/public/logo.png ./web/public/logo.png
 
 # 暴露端口
 EXPOSE 8080

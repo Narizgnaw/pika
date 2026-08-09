@@ -1,73 +1,39 @@
-# React + TypeScript + Vite
+# Pika Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Web 前端由两个相互隔离的 React/Vite 应用和一个主题 SDK 组成：
 
-Currently, two official plugins are available:
+- `admin/`：官方管理后台、登录和 OAuth/OIDC 回调，只发布到 `/admin/assets/*`；
+- `portal/`：官方默认公开主题，只发布到 `/theme-assets/*`，构建后封装为不可删除的 `default-theme`；
+- `theme-sdk/`：第三方主题可依赖的稳定公开 API 与 TypeScript 契约；
+- 三个目录分别维护自己的 `package.json` 和 `package-lock.json`，根 `web` 不再是 npm workspace。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+两个 React 项目没有跨目录源码 import。第三方主题也不能引用 `admin` 或 `portal` 源码。
 
-## React Compiler
+`portal/src/components` 只放跨页面共享的 UI；服务器和监控页面的私有卡片、区块及图表分别与页面放在 `portal/src/pages/servers` 和 `portal/src/pages/monitors`，避免把所有页面片段都提升为全局组件。
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+分别开发和构建：
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cd web/admin && npm ci && npm run dev
+cd web/portal && npm ci && npm run dev
+cd web/theme-sdk && npm ci && npm run build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+默认开发地址分别为 portal `http://localhost:5173/`、admin `http://localhost:5174/admin/`，两者都把 `/api/*` 代理到 `http://localhost:8080`，可以同时启动。portal 只在生产构建时使用 `/theme-assets/` 资源前缀。
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+`admin` 和 `portal` 都只向各自目录的 `dist/` 输出。仓库发布构建使用 `make build-web` 独立安装和编译三个项目，再组装、校验以下服务端产物：
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```text
+dist/admin/index.html
+dist/admin/assets/*
+dist/default-theme/pika-theme.json
+dist/default-theme/dist/index.html
+dist/default-theme/dist/assets/*
 ```
+
+运行路径固定为：
+
+- portal：`/`、`/servers/*`、`/monitors/*`；
+- admin：`/admin/*`，包括 `/admin/login` 和 OAuth/OIDC 回调；
+- admin 资源：`/admin/assets/*`；
+- 活动主题资源：`/theme-assets/*`。

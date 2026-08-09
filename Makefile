@@ -19,7 +19,12 @@ GOFLAGS=CGO_ENABLED=0
 
 # 构建前端
 build-web:
-	cd web && yarn && yarn build
+	npm ci --prefix web/admin
+	npm run build --prefix web/admin
+	npm ci --prefix web/portal
+	npm run build --prefix web/portal
+	node web/scripts/assemble-web.mjs
+	node web/scripts/verify-dist.mjs
 
 # 构建服务端（开发）
 build-server:
@@ -72,6 +77,7 @@ build-release:
 clean:
 	rm -rf bin/*
 	rm -rf web/dist
+	rm -rf web/admin/dist web/portal/dist
 
 # 运行测试
 test:
@@ -80,7 +86,6 @@ test:
 # 代码格式化
 fmt:
 	go fmt ./...
-	cd web && yarn format
 
 # 代码检查
 lint:

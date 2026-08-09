@@ -2,14 +2,10 @@ package internal
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"strings"
 	"time"
 
-	"github.com/dushixiang/pika/internal/assets"
 	"github.com/dushixiang/pika/internal/config"
 	"github.com/dushixiang/pika/internal/handler"
 	"github.com/dushixiang/pika/internal/migrate"
@@ -124,36 +120,6 @@ func setupApi(app *orz.App, components *AppComponents) error {
 	e.Use(middleware.Recover())
 	e.Use(ErrorHandler(logger))
 
-	webDir := assets.WebDir()
-	if err := assets.RenderUIFilesInDir(webDir, components.PropertyService); err != nil {
-		return fmt.Errorf("render ui files: %w", err)
-	}
-
-	// 静态文件服务
-	e.Use(middleware.StaticWithConfig(middleware.StaticConfig{
-		Skipper: func(c *echo.Context) bool {
-			// 不处理接口
-			if strings.HasPrefix(c.Request().RequestURI, "/api") {
-				return true
-			}
-			// 不处理WebSocket
-			if strings.HasPrefix(c.Request().RequestURI, "/ws") {
-				return true
-			}
-			// 不暴露模板文件
-			if strings.HasSuffix(c.Request().RequestURI, ".tmpl") {
-				return true
-			}
-			return false
-		},
-		Root:       ".",
-		Index:      "index.html",
-		HTML5:      true,
-		Browse:     false,
-		IgnoreBase: false,
-		Filesystem: os.DirFS(webDir),
-	}))
-
 	customValidator := CustomValidator{Validator: validator.New()}
 	if err := customValidator.TransInit(); err != nil {
 		logger.Fatal("failed to init custom validator", zap.Error(err))
@@ -168,6 +134,7 @@ func setupApi(app *orz.App, components *AppComponents) error {
 		publicApi.GET("/auth/config", components.AccountHandler.GetAuthConfig)
 		publicApi.GET("/auth/oidc/url", components.AccountHandler.GetOIDCAuthURL)
 		publicApi.GET("/auth/github/url", components.AccountHandler.GetGitHubAuthURL)
+		publicApi.GET("/config", components.WebHandler.PublicConfig)
 
 		// Agent 版本和下载（完全公开，无需任何认证）
 		publicApi.GET("/agent/version", components.AgentHandler.GetAgentVersion)
@@ -293,6 +260,13 @@ func setupApi(app *orz.App, components *AppComponents) error {
 		adminApi.POST("/ddns/:id/disable", components.DDNSHandler.Disable)
 		adminApi.GET("/ddns/:id/records", components.DDNSHandler.GetRecords)
 		adminApi.POST("/ddns/:id/trigger", components.DDNSHandler.TriggerUpdate)
+
+		// 可安装主题管理
+		adminApi.GET("/themes", components.ThemeHandler.List)
+		adminApi.POST("/themes/upload", components.ThemeHandler.Upload)
+		adminApi.PUT("/themes/:id/activate", components.ThemeHandler.Activate)
+		adminApi.DELETE("/themes/:id", components.ThemeHandler.Delete)
+		adminApi.GET("/themes/:id/preview", components.ThemeHandler.Preview)
 	}
 
 	// OIDC 认证路由（如果启用）
@@ -301,23 +275,28 @@ func setupApi(app *orz.App, components *AppComponents) error {
 	// GitHub 认证路由（如果启用）
 	publicApi.POST("/auth/github/callback", components.AccountHandler.GitHubLogin)
 
+	// 官方管理 SPA 与活动公开主题使用互不重叠的资源前缀。
+	e.GET("/admin/assets/*", components.WebHandler.ServeAdminAsset)
+	e.GET("/theme-assets/*", components.WebHandler.ServeThemeAsset)
+	e.GET("/*", components.WebHandler.ServeSPA)
+
 	return nil
 }
 
 func autoMigrate(database *gorm.DB) error {
 	// 自动迁移数据库表
 	return database.AutoMigrate(
-		&models.Agent{},         // 探针
-		&models.ApiKey{},        // ApiKey
-		&models.AuditResult{},   // 审计历史
-		&models.Property{},      // 系统属性
-		&models.AlertRecord{},   // 告警记录
-		&models.AlertState{},    // 告警状态
-		&models.MonitorTask{},   // 服务监控
-		&models.TamperEvent{},   // 防篡改事件
-		&models.DDNSConfig{},    // DDNS 配置
-		&models.DDNSRecord{},    // DDNS 记录
-		&models.SSHLoginEvent{}, // SSH 登录事件
+		&models.Agent{},              // 探针
+		&models.ApiKey{},             // ApiKey
+		&models.AuditResult{},        // 审计历史
+		&models.Property{},           // 系统属性
+		&models.AlertRecord{},        // 告警记录
+		&models.AlertState{},         // 告警状态
+		&models.MonitorTask{},        // 服务监控
+		&models.TamperEvent{},        // 防篡改事件
+		&models.DDNSConfig{},         // DDNS 配置
+		&models.DDNSRecord{},         // DDNS 记录
+		&models.SSHLoginEvent{},      // SSH 登录事件
 	)
 }
 

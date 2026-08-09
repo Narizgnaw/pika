@@ -39,6 +39,7 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 		service.NewDDNSService,
 		service.NewSSHLoginService,
 		service.NewPublicIPService,
+		service.NewThemeService,
 
 		service.NewNotifier,
 		// WebSocket Manager
@@ -55,6 +56,8 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 		handler.NewDNSProviderHandler,
 		handler.NewDDNSHandler,
 		handler.NewSSHLoginHandler,
+		handler.NewThemeHandler,
+		handler.NewWebHandler,
 
 		// App Components
 		wire.Struct(new(AppComponents), "*"),
@@ -74,6 +77,8 @@ type AppComponents struct {
 	DNSProviderHandler *handler.DNSProviderHandler
 	DDNSHandler        *handler.DDNSHandler
 	SSHLoginHandler    *handler.SSHLoginHandler
+	ThemeHandler       *handler.ThemeHandler
+	WebHandler         *handler.WebHandler
 
 	AgentService    *service.AgentService
 	TrafficService  *service.TrafficService
@@ -86,6 +91,7 @@ type AppComponents struct {
 	DDNSService     *service.DDNSService
 	SSHLoginService *service.SSHLoginService
 	PublicIPService *service.PublicIPService
+	ThemeService    *service.ThemeService
 
 	WSManager *websocket.Manager
 	VMClient  *vmclient.VMClient

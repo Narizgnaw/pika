@@ -8,6 +8,12 @@ type AppConfig struct {
 	GitHub          *GitHubOAuthConfig `json:"GitHub"`          // GitHub OAuth配置（可选）
 	GeoIP           *GeoIPConfig       `json:"GeoIP"`           // GeoIP配置（可选）
 	VictoriaMetrics *VMConfig          `json:"VictoriaMetrics"` // VictoriaMetrics配置（可选）
+	Theme           *ThemeConfig       `json:"Theme"`           // 主题系统配置（可选）
+}
+
+// ThemeConfig 可安装主题系统配置。
+type ThemeConfig struct {
+	Dir string `json:"Dir"`
 }
 
 // JWTConfig JWT配置

@@ -30,6 +30,8 @@ const (
 	PropertyIDDNSProviders = "dns_providers"
 	// PropertyIDAgentInstallConfig 探针安装配置的固定 ID
 	PropertyIDAgentInstallConfig = "agent_install_config"
+	// PropertyIDAppearanceConfig 当前公开主题和默认明暗模式。
+	PropertyIDAppearanceConfig = "appearance_config"
 )
 
 var defaultPublicIPv4APIs = []string{
@@ -140,6 +142,24 @@ func (s *PropertyService) GetSystemConfig(ctx context.Context) (*models.SystemCo
 	// 设置系统版本
 	systemConfig.Version = version.Version
 	return &systemConfig, nil
+}
+
+func (s *PropertyService) GetAppearanceConfig(ctx context.Context) (*AppearanceConfig, error) {
+	var config AppearanceConfig
+	if err := s.GetValue(ctx, PropertyIDAppearanceConfig, &config); err != nil {
+		return nil, fmt.Errorf("获取外观配置失败: %w", err)
+	}
+	if config.ActiveTheme == "" {
+		config.ActiveTheme = "default"
+	}
+	if config.DefaultColorMode == "" {
+		config.DefaultColorMode = "system"
+	}
+	return &config, nil
+}
+
+func (s *PropertyService) SetAppearanceConfig(ctx context.Context, config AppearanceConfig) error {
+	return s.Set(ctx, PropertyIDAppearanceConfig, "外观配置", config)
 }
 
 // GetPublicIPConfig 获取公网 IP 采集配置
@@ -350,6 +370,14 @@ func (s *PropertyService) InitializeDefaultConfigs(ctx context.Context) error {
 				LogoBase64:   assets.DefaultLogoBase64(),
 				ICPCode:      "",
 				DefaultView:  "grid",
+			},
+		},
+		{
+			ID:   PropertyIDAppearanceConfig,
+			Name: "外观配置",
+			Value: AppearanceConfig{
+				ActiveTheme:      "default",
+				DefaultColorMode: "system",
 			},
 		},
 		{

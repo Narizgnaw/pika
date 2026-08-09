@@ -28,6 +28,10 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 	accountHandler := handler.NewAccountHandler(accountService)
 	apiKeyService := service.NewApiKeyService(logger, db)
 	propertyService := service.NewPropertyService(logger, db)
+	themeService, err := service.NewThemeService(logger, propertyService, cfg)
+	if err != nil {
+		return nil, err
+	}
 	notifier := service.NewNotifier(logger)
 	notificationService := service.NewNotificationService(logger, propertyService, notifier)
 	trafficService := service.NewTrafficService(logger, db, notificationService)
@@ -54,6 +58,8 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 	dnsProviderHandler := handler.NewDNSProviderHandler(logger, propertyService)
 	ddnsHandler := handler.NewDDNSHandler(logger, ddnsService)
 	sshLoginHandler := handler.NewSSHLoginHandler(logger, sshLoginService)
+	themeHandler := handler.NewThemeHandler(logger, themeService)
+	webHandler := handler.NewWebHandler(themeService, propertyService)
 	appComponents := &AppComponents{
 		AccountHandler:     accountHandler,
 		AgentHandler:       agentHandler,
@@ -65,6 +71,8 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 		DNSProviderHandler: dnsProviderHandler,
 		DDNSHandler:        ddnsHandler,
 		SSHLoginHandler:    sshLoginHandler,
+		ThemeHandler:       themeHandler,
+		WebHandler:         webHandler,
 		AgentService:       agentService,
 		TrafficService:     trafficService,
 		MetricService:      metricService,
@@ -76,6 +84,7 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 		DDNSService:        ddnsService,
 		SSHLoginService:    sshLoginService,
 		PublicIPService:    publicIPService,
+		ThemeService:       themeService,
 		WSManager:          manager,
 		VMClient:           vmClient,
 	}
@@ -96,6 +105,8 @@ type AppComponents struct {
 	DNSProviderHandler *handler.DNSProviderHandler
 	DDNSHandler        *handler.DDNSHandler
 	SSHLoginHandler    *handler.SSHLoginHandler
+	ThemeHandler       *handler.ThemeHandler
+	WebHandler         *handler.WebHandler
 
 	AgentService    *service.AgentService
 	TrafficService  *service.TrafficService
@@ -108,6 +119,7 @@ type AppComponents struct {
 	DDNSService     *service.DDNSService
 	SSHLoginService *service.SSHLoginService
 	PublicIPService *service.PublicIPService
+	ThemeService    *service.ThemeService
 
 	WSManager *websocket.Manager
 	VMClient  *vmclient.VMClient
