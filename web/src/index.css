@@ -6,46 +6,56 @@
 /* Tailwind v4 暗色模式配置 */
 @variant dark (&:where(.dark, .dark *));
 
-/* 标签过滤器滚动条样式 */
-.tag-filter-scrollbar {
+/* 通用细滚动条样式 */
+.tag-filter-scrollbar,
+.thin-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: rgb(203, 213, 225) transparent;
     scrollbar-gutter: stable;
 }
 
-.tag-filter-scrollbar::-webkit-scrollbar {
+.tag-filter-scrollbar::-webkit-scrollbar,
+.thin-scrollbar::-webkit-scrollbar {
     height: 6px;
+    width: 6px;
 }
 
-.tag-filter-scrollbar::-webkit-scrollbar-track {
+.tag-filter-scrollbar::-webkit-scrollbar-track,
+.thin-scrollbar::-webkit-scrollbar-track {
     background: rgb(241, 245, 249);
     border-radius: 9999px;
 }
 
-.tag-filter-scrollbar::-webkit-scrollbar-thumb {
+.tag-filter-scrollbar::-webkit-scrollbar-thumb,
+.thin-scrollbar::-webkit-scrollbar-thumb {
     background: rgb(203, 213, 225);
     border-radius: 9999px;
     transition: background-color 0.2s;
 }
 
-.tag-filter-scrollbar::-webkit-scrollbar-thumb:hover {
+.tag-filter-scrollbar::-webkit-scrollbar-thumb:hover,
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
     background: rgb(148, 163, 184);
 }
 
-/* 暗色模式标签过滤器滚动条 */
-.dark .tag-filter-scrollbar {
+/* 暗色模式 */
+.dark .tag-filter-scrollbar,
+.dark .thin-scrollbar {
     scrollbar-color: rgb(71, 85, 105) transparent;
 }
 
-.dark .tag-filter-scrollbar::-webkit-scrollbar-track {
+.dark .tag-filter-scrollbar::-webkit-scrollbar-track,
+.dark .thin-scrollbar::-webkit-scrollbar-track {
     background: rgb(30, 41, 59);
 }
 
-.dark .tag-filter-scrollbar::-webkit-scrollbar-thumb {
+.dark .tag-filter-scrollbar::-webkit-scrollbar-thumb,
+.dark .thin-scrollbar::-webkit-scrollbar-thumb {
     background: rgb(71, 85, 105);
 }
 
-.dark .tag-filter-scrollbar::-webkit-scrollbar-thumb:hover {
+.dark .tag-filter-scrollbar::-webkit-scrollbar-thumb:hover,
+.dark .thin-scrollbar::-webkit-scrollbar-thumb:hover {
     background: rgb(100, 116, 139);
 }
 

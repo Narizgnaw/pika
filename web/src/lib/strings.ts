@@ -1,3 +1,3 @@
-export const hasText = (text?: string) => {
-    return text !== undefined && text !== null && text.trim().length > 0;
+export function hasText(value?: string | null): boolean {
+    return value !== null && value !== undefined && value.trim().length > 0;
 }
