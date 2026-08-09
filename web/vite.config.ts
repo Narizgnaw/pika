@@ -9,7 +9,6 @@ export default defineConfig({
     publicDir: false,
     resolve: {alias: {
         '@': path.resolve(__dirname, './src'),
-        '@admin': path.resolve(__dirname, './src/admin'),
     }},
     build: {
         outDir: path.resolve(__dirname, 'dist/admin'),

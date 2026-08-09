@@ -7,7 +7,7 @@ import {clearAlertRecords, getAlertRecords} from '@/api/alert.ts';
 import type {AlertRecord} from '@/types';
 import dayjs from 'dayjs';
 import {getErrorMessage} from '@/lib/utils';
-import {PageHeader} from '@admin/components';
+import {PageHeader} from '@/components';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {listAgentsByAdmin} from "@/api/agent.ts";
 

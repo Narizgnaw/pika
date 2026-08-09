@@ -7,7 +7,7 @@ import {deleteManageApiKey, disableManageApiKey, enableManageApiKey, listManageA
 import type {ApiKey} from '@/types';
 import dayjs from 'dayjs';
 import {getErrorMessage} from '@/lib/utils';
-import {PageHeader} from '@admin/components';
+import {PageHeader} from '@/components';
 import ManageApiKeyModal from './ManageApiKeyModal';
 import ShowManageApiKeyModal from './ShowManageApiKeyModal';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';

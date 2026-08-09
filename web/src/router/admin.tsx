@@ -1,21 +1,21 @@
 import {createBrowserRouter, Navigate} from 'react-router-dom';
 import {type ComponentType, lazy, type LazyExoticComponent, Suspense} from 'react';
-import PrivateRoute from '@admin/components/PrivateRoute';
+import PrivateRoute from '@/components/PrivateRoute';
 
-const LoginPage = lazy(() => import('@admin/pages/Login'));
-const GitHubCallbackPage = lazy(() => import('@admin/pages/Login/GitHubCallback'));
-const OIDCCallbackPage = lazy(() => import('@admin/pages/Login/OIDCCallback'));
-const AdminLayout = lazy(() => import('@admin/pages/AdminLayout'));
-const AgentListPage = lazy(() => import('@admin/pages/Agents/AgentList'));
-const AgentDetailPage = lazy(() => import('@admin/pages/Agents/AgentDetail'));
-const AgentInstallOneClickPage = lazy(() => import('@admin/pages/Agents/AgentInstallOneClick'));
-const AgentInstallManualPage = lazy(() => import('@admin/pages/Agents/AgentInstallManual'));
-const ApiKeyListPage = lazy(() => import('@admin/pages/ApiKeys/ApiKeyList'));
-const ManageApiKeyListPage = lazy(() => import('@admin/pages/ManageApiKeys/ManageApiKeyList'));
-const SettingsPage = lazy(() => import('@admin/pages/Settings'));
-const MonitorListPage = lazy(() => import('@admin/pages/Monitors/MonitorList'));
-const DDNSPage = lazy(() => import('@admin/pages/DDNS'));
-const AlertRecordListPage = lazy(() => import('@admin/pages/AlertRecords'));
+const LoginPage = lazy(() => import('@/pages/Login'));
+const GitHubCallbackPage = lazy(() => import('@/pages/Login/GitHubCallback'));
+const OIDCCallbackPage = lazy(() => import('@/pages/Login/OIDCCallback'));
+const AdminLayout = lazy(() => import('@/pages/AdminLayout'));
+const AgentListPage = lazy(() => import('@/pages/Agents/AgentList'));
+const AgentDetailPage = lazy(() => import('@/pages/Agents/AgentDetail'));
+const AgentInstallOneClickPage = lazy(() => import('@/pages/Agents/AgentInstallOneClick'));
+const AgentInstallManualPage = lazy(() => import('@/pages/Agents/AgentInstallManual'));
+const ApiKeyListPage = lazy(() => import('@/pages/ApiKeys/ApiKeyList'));
+const ManageApiKeyListPage = lazy(() => import('@/pages/ManageApiKeys/ManageApiKeyList'));
+const SettingsPage = lazy(() => import('@/pages/Settings'));
+const MonitorListPage = lazy(() => import('@/pages/Monitors/MonitorList'));
+const DDNSPage = lazy(() => import('@/pages/DDNS'));
+const AlertRecordListPage = lazy(() => import('@/pages/AlertRecords'));
 
 const lazyLoad = (Component: LazyExoticComponent<ComponentType<any>>) => (
     <Suspense fallback={<div className="flex h-[75vh] items-center justify-center text-gray-500">页面加载中...</div>}>

@@ -20,9 +20,6 @@
     "paths": {
       "@/*": [
         "./src/*"
-      ],
-      "@admin/*": [
-        "./src/admin/*"
       ]
     },
     "allowSyntheticDefaultImports": true

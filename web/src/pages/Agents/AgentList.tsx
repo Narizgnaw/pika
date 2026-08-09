@@ -9,7 +9,7 @@ import dayjs from 'dayjs';
 import {deleteAgent, getTags, listAgentsByAdmin} from '@/api/agent.ts';
 import type {Agent} from '@/types';
 import {getErrorMessage} from '@/lib/utils';
-import {PageHeader} from '@admin/components';
+import {PageHeader} from '@/components';
 import AgentEditModal from './AgentEditModal';
 import BatchTagsModal from './BatchTagsModal';
 import BatchTamperProtectionModal from './BatchTamperProtectionModal';

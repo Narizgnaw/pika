@@ -8,7 +8,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {deleteMonitor, listMonitors} from '@/api/monitor.ts';
 import type {MonitorTask} from '@/types';
 import {getErrorMessage} from '@/lib/utils';
-import {PageHeader} from '@admin/components';
+import {PageHeader} from '@/components';
 import MonitorModal from './MonitorModal';
 
 const MonitorList = () => {

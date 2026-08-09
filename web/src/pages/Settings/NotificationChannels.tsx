@@ -9,7 +9,7 @@ import {
     testNotificationChannel,
 } from '@/api/property.ts';
 import {getErrorMessage} from '@/lib/utils';
-import NotificationCustomHelp from "@admin/pages/Settings/NotificationCustomHelp.tsx";
+import NotificationCustomHelp from "@/pages/Settings/NotificationCustomHelp.tsx";
 
 const NotificationChannels = () => {
     const [form] = Form.useForm();
