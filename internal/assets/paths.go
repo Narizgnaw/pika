@@ -9,7 +9,7 @@ import (
 const (
 	defaultWebDir   = "web/dist"
 	defaultAgentDir = "bin/agents"
-	defaultLogoPath = "web/portal/public/logo.png"
+	defaultLogoPath = "portal/public/logo.png"
 )
 
 func WebDir() string {

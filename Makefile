@@ -19,10 +19,10 @@ GOFLAGS=CGO_ENABLED=0
 
 # 构建前端
 build-web:
-	npm ci --prefix web/admin
-	npm run build --prefix web/admin
-	npm ci --prefix web/portal
-	npm run build --prefix web/portal
+	npm ci --prefix web
+	npm run build --prefix web
+	npm ci --prefix portal
+	npm run build --prefix portal
 	node web/scripts/assemble-web.mjs
 	node web/scripts/verify-dist.mjs
 
@@ -76,8 +76,7 @@ build-release:
 # 清理编译产物
 clean:
 	rm -rf bin/*
-	rm -rf web/dist
-	rm -rf web/admin/dist web/portal/dist
+	rm -rf web/dist web/.dist portal/dist
 
 # 运行测试
 test:
