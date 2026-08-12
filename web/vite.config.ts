@@ -17,6 +17,14 @@ export default defineConfig({
     },
     server: {
         port: 5174,
-        proxy: {'/api/': {target: 'http://localhost:8080/', changeOrigin: true}},
+        proxy: {
+            // 管理后台由当前 Vite 服务提供，其余路径交给 Pika 后端，
+            // 这样访问开发端口的根路径时也能打开活动的公开主题。
+            '^/(?!admin(?:/|$))': {
+                target: 'http://localhost:8080',
+                changeOrigin: true,
+                ws: true,
+            },
+        },
     },
 });

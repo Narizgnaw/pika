@@ -11,7 +11,10 @@ cd web && npm ci && npm run dev                  # 管理后台，http://localho
 cd ../pika-default-theme && npm ci && npm run dev # 默认主题，http://localhost:5173/
 ```
 
-两者都把 `/api/*` 代理到 `http://localhost:8080`，可以同时启动。
+管理后台开发服务器保留 `/admin/*`，并将其他路径代理到 `http://localhost:8080`。因此启动 Pika
+后端后，可以通过 `http://localhost:5174/` 访问当前公开主题，通过
+`http://localhost:5174/admin/` 访问管理后台。默认主题项目的开发服务器也会把 `/api/*`
+代理到 Pika 后端，两者可以同时启动。
 
 ## 构建
 
