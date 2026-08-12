@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dushixiang/pika/internal/models"
-	"github.com/dushixiang/pika/internal/protocol"
 	"github.com/go-orz/orz"
 	"github.com/labstack/echo/v5"
+	"github.com/pika-monitor/pika/internal/models"
+	"github.com/pika-monitor/pika/internal/protocol"
 	"go.uber.org/zap"
 )
 

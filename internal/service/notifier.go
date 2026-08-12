@@ -17,9 +17,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/dushixiang/pika/internal/models"
-	"github.com/dushixiang/pika/internal/utils"
 	"github.com/go-orz/cache"
+	"github.com/pika-monitor/pika/internal/models"
+	"github.com/pika-monitor/pika/internal/utils"
 	"github.com/valyala/fasttemplate"
 	"go.uber.org/zap"
 	"gopkg.in/gomail.v2"

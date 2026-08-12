@@ -6,12 +6,12 @@ package internal
 import (
 	"time"
 
-	"github.com/dushixiang/pika/internal/config"
-	"github.com/dushixiang/pika/internal/handler"
-	"github.com/dushixiang/pika/internal/service"
-	"github.com/dushixiang/pika/internal/vmclient"
-	"github.com/dushixiang/pika/internal/websocket"
 	"github.com/google/wire"
+	"github.com/pika-monitor/pika/internal/config"
+	"github.com/pika-monitor/pika/internal/handler"
+	"github.com/pika-monitor/pika/internal/service"
+	"github.com/pika-monitor/pika/internal/vmclient"
+	"github.com/pika-monitor/pika/internal/websocket"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )

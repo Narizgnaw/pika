@@ -17,11 +17,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dushixiang/pika/internal/assets"
-	"github.com/dushixiang/pika/internal/config"
-	"github.com/dushixiang/pika/internal/models"
-	"github.com/dushixiang/pika/pkg/version"
 	"github.com/google/uuid"
+	"github.com/pika-monitor/pika/internal/assets"
+	"github.com/pika-monitor/pika/internal/config"
+	"github.com/pika-monitor/pika/internal/models"
+	"github.com/pika-monitor/pika/pkg/version"
 	"go.uber.org/zap"
 	"golang.org/x/text/unicode/norm"
 )

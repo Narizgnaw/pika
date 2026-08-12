@@ -14,7 +14,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/dushixiang/pika/pkg/version"
+	"github.com/pika-monitor/pika/pkg/version"
 	"golang.org/x/text/unicode/norm"
 )
 

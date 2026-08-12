@@ -3,11 +3,11 @@ package handler
 import (
 	"time"
 
-	"github.com/dushixiang/pika/internal/models"
-	"github.com/dushixiang/pika/internal/service"
 	"github.com/go-orz/orz"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
+	"github.com/pika-monitor/pika/internal/models"
+	"github.com/pika-monitor/pika/internal/service"
 	"go.uber.org/zap"
 )
 

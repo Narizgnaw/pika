@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/dushixiang/pika/pkg/agent/utils"
 	"github.com/google/uuid"
+	"github.com/pika-monitor/pika/pkg/agent/utils"
 )
 
 // Manager 管理探针的唯一标识

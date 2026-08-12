@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/dushixiang/pika/internal/assets"
-	"github.com/dushixiang/pika/pkg/version"
 	"github.com/go-orz/orz"
 	"github.com/labstack/echo/v5"
+	"github.com/pika-monitor/pika/internal/assets"
+	"github.com/pika-monitor/pika/pkg/version"
 	"go.uber.org/zap"
 )
 

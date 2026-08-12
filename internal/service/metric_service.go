@@ -10,11 +10,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dushixiang/pika/internal/metric"
-	"github.com/dushixiang/pika/internal/protocol"
-	"github.com/dushixiang/pika/internal/repo"
-	"github.com/dushixiang/pika/internal/vmclient"
 	"github.com/go-orz/toolkit/syncx"
+	"github.com/pika-monitor/pika/internal/metric"
+	"github.com/pika-monitor/pika/internal/protocol"
+	"github.com/pika-monitor/pika/internal/repo"
+	"github.com/pika-monitor/pika/internal/vmclient"
 
 	"github.com/go-orz/cache"
 	"go.uber.org/zap"

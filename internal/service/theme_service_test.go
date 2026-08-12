@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dushixiang/pika/internal/config"
-	"github.com/dushixiang/pika/internal/models"
-	"github.com/dushixiang/pika/pkg/version"
 	"github.com/glebarez/sqlite"
+	"github.com/pika-monitor/pika/internal/config"
+	"github.com/pika-monitor/pika/internal/models"
+	"github.com/pika-monitor/pika/pkg/version"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -313,9 +313,9 @@ func validTestManifest(id string) ThemeManifest {
 		Name:          "Minimal",
 		Version:       "1.2.3",
 		Author:        "Pika",
-		Preview:      "preview.png",
-		Entry:        "dist/index.html",
-		APIVersion:   ThemeAPIVersion,
-		Capabilities: append([]string(nil), requiredThemeCaps...),
+		Preview:       "preview.png",
+		Entry:         "dist/index.html",
+		APIVersion:    ThemeAPIVersion,
+		Capabilities:  append([]string(nil), requiredThemeCaps...),
 	}
 }

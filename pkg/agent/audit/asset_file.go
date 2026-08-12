@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dushixiang/pika/internal/protocol"
+	"github.com/pika-monitor/pika/internal/protocol"
 )
 
 // FileAssetsCollector 文件资产收集器

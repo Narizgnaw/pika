@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dushixiang/pika/pkg/agent/utils"
+	"github.com/pika-monitor/pika/pkg/agent/utils"
 )
 
 const legacyMetricsBufferDBName = "metrics_buffer.db"

@@ -6,14 +6,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dushixiang/pika/internal/config"
-	"github.com/dushixiang/pika/internal/handler"
-	"github.com/dushixiang/pika/internal/migrate"
-	"github.com/dushixiang/pika/internal/models"
-	"github.com/dushixiang/pika/internal/scheduler"
-	"github.com/dushixiang/pika/internal/service"
-	"github.com/dushixiang/pika/pkg/version"
 	"github.com/google/uuid"
+	"github.com/pika-monitor/pika/internal/config"
+	"github.com/pika-monitor/pika/internal/handler"
+	"github.com/pika-monitor/pika/internal/migrate"
+	"github.com/pika-monitor/pika/internal/models"
+	"github.com/pika-monitor/pika/internal/scheduler"
+	"github.com/pika-monitor/pika/internal/service"
+	"github.com/pika-monitor/pika/pkg/version"
 
 	"github.com/go-errors/errors"
 	"github.com/go-orz/orz"
@@ -286,17 +286,17 @@ func setupApi(app *orz.App, components *AppComponents) error {
 func autoMigrate(database *gorm.DB) error {
 	// 自动迁移数据库表
 	return database.AutoMigrate(
-		&models.Agent{},              // 探针
-		&models.ApiKey{},             // ApiKey
-		&models.AuditResult{},        // 审计历史
-		&models.Property{},           // 系统属性
-		&models.AlertRecord{},        // 告警记录
-		&models.AlertState{},         // 告警状态
-		&models.MonitorTask{},        // 服务监控
-		&models.TamperEvent{},        // 防篡改事件
-		&models.DDNSConfig{},         // DDNS 配置
-		&models.DDNSRecord{},         // DDNS 记录
-		&models.SSHLoginEvent{},      // SSH 登录事件
+		&models.Agent{},         // 探针
+		&models.ApiKey{},        // ApiKey
+		&models.AuditResult{},   // 审计历史
+		&models.Property{},      // 系统属性
+		&models.AlertRecord{},   // 告警记录
+		&models.AlertState{},    // 告警状态
+		&models.MonitorTask{},   // 服务监控
+		&models.TamperEvent{},   // 防篡改事件
+		&models.DDNSConfig{},    // DDNS 配置
+		&models.DDNSRecord{},    // DDNS 记录
+		&models.SSHLoginEvent{}, // SSH 登录事件
 	)
 }
 

@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dushixiang/pika/internal/models"
-	"github.com/dushixiang/pika/internal/protocol"
-	"github.com/dushixiang/pika/internal/repo"
-	"github.com/dushixiang/pika/internal/websocket"
+	"github.com/pika-monitor/pika/internal/models"
+	"github.com/pika-monitor/pika/internal/protocol"
+	"github.com/pika-monitor/pika/internal/repo"
+	"github.com/pika-monitor/pika/internal/websocket"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"

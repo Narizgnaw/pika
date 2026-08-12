@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dushixiang/pika/pkg/agent/config"
+	"github.com/pika-monitor/pika/pkg/agent/config"
 )
 
 func TestRemoveAgentDataDefaultConfig(t *testing.T) {

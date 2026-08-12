@@ -3,20 +3,20 @@ package collector
 import (
 	"strings"
 
-	"github.com/dushixiang/pika/internal/protocol"
-	"github.com/dushixiang/pika/pkg/agent/config"
+	"github.com/pika-monitor/pika/internal/protocol"
+	"github.com/pika-monitor/pika/pkg/agent/config"
 	"github.com/shirou/gopsutil/v4/disk"
 )
 
 // 不以 /dev/ 开头但仍是真实存储的文件系统类型
 var realFSTypes = map[string]bool{
-	"nfs":    true,
-	"nfs4":   true,
-	"cifs":   true,
-	"smbfs":  true,
-	"zfs":    true,
+	"nfs":       true,
+	"nfs4":      true,
+	"cifs":      true,
+	"smbfs":     true,
+	"zfs":       true,
 	"glusterfs": true,
-	"cephfs": true,
+	"cephfs":    true,
 }
 
 // DiskCollector 磁盘监控采集器
@@ -47,12 +47,12 @@ func isRealDisk(device, fstype string) bool {
 
 // macOS APFS 容器内与数据卷共享物理空间的系统辅助卷
 var macosSystemVolumes = map[string]bool{
-	"Preboot":   true,
-	"VM":        true,
-	"Update":    true,
-	"xarts":     true,
+	"Preboot":    true,
+	"VM":         true,
+	"Update":     true,
+	"xarts":      true,
 	"iSCPreboot": true,
-	"Hardware":  true,
+	"Hardware":   true,
 }
 
 // isMacOSRedundant 判断是否为 macOS APFS 冗余系统卷

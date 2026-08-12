@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/dushixiang/pika/pkg/agent/utils"
+	"github.com/pika-monitor/pika/pkg/agent/utils"
 	"gopkg.in/yaml.v3"
 )
 

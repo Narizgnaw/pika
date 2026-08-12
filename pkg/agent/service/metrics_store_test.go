@@ -3,7 +3,7 @@ package service
 import (
 	"testing"
 
-	"github.com/dushixiang/pika/internal/protocol"
+	"github.com/pika-monitor/pika/internal/protocol"
 )
 
 func metricSample(metricType protocol.MetricType, timestamp int64) protocol.MetricSample {

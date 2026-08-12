@@ -1,7 +1,7 @@
 package v0_1_3
 
 import (
-	"github.com/dushixiang/pika/internal/models"
+	"github.com/pika-monitor/pika/internal/models"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )

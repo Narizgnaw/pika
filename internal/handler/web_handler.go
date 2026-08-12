@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/dushixiang/pika/internal/assets"
-	"github.com/dushixiang/pika/internal/service"
-	"github.com/dushixiang/pika/pkg/version"
 	"github.com/go-orz/orz"
 	"github.com/labstack/echo/v5"
+	"github.com/pika-monitor/pika/internal/assets"
+	"github.com/pika-monitor/pika/internal/service"
+	"github.com/pika-monitor/pika/pkg/version"
 )
 
 type WebHandler struct {

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dushixiang/pika/internal/protocol"
+	"github.com/pika-monitor/pika/internal/protocol"
 )
 
 // MonitorCollector 监控采集器

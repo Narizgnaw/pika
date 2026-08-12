@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dushixiang/pika/internal/protocol"
-	ws "github.com/dushixiang/pika/internal/websocket"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v5"
+	"github.com/pika-monitor/pika/internal/protocol"
+	ws "github.com/pika-monitor/pika/internal/websocket"
 	"go.uber.org/zap"
 )
 

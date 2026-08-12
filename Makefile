@@ -13,8 +13,8 @@ BUILD_TIME=$(shell date +%Y-%m-%d_%H:%M:%S)
 UPX_FLAGS ?=
 
 # Go 构建参数
-LDFLAGS=-s -w -X 'github.com/dushixiang/pika/pkg/version.Version=$(VERSION)' -X 'github.com/dushixiang/pika/pkg/version.AgentVersion=$(AGENT_VERSION)'
-AGENT_LDFLAGS=-s -w -X 'github.com/dushixiang/pika/pkg/version.Version=$(VERSION)' -X 'github.com/dushixiang/pika/pkg/version.AgentVersion=$(AGENT_VERSION)'
+LDFLAGS=-s -w -X 'github.com/pika-monitor/pika/pkg/version.Version=$(VERSION)' -X 'github.com/pika-monitor/pika/pkg/version.AgentVersion=$(AGENT_VERSION)'
+AGENT_LDFLAGS=-s -w -X 'github.com/pika-monitor/pika/pkg/version.Version=$(VERSION)' -X 'github.com/pika-monitor/pika/pkg/version.AgentVersion=$(AGENT_VERSION)'
 GOFLAGS=CGO_ENABLED=0
 
 # 构建前端

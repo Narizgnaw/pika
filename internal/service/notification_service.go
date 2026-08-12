@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"github.com/dushixiang/pika/internal/models"
+	"github.com/pika-monitor/pika/internal/models"
 	"go.uber.org/zap"
 )
 

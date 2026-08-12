@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dushixiang/pika/internal/protocol"
-	"github.com/dushixiang/pika/pkg/agent/collector"
+	"github.com/pika-monitor/pika/internal/protocol"
+	"github.com/pika-monitor/pika/pkg/agent/collector"
 )
 
 // collectorBaseInterval 采集循环的基础节奏，所有采集器的采集间隔必须是它的整数倍

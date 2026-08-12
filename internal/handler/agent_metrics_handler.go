@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dushixiang/pika/internal/utils"
 	"github.com/go-orz/orz"
 	"github.com/labstack/echo/v5"
+	"github.com/pika-monitor/pika/internal/utils"
 )
 
 var validMetricTypes = map[string]struct{}{

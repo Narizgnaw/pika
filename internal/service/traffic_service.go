@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dushixiang/pika/internal/models"
-	"github.com/dushixiang/pika/internal/repo"
+	"github.com/pika-monitor/pika/internal/models"
+	"github.com/pika-monitor/pika/internal/repo"
 
 	"go.uber.org/zap"
 	"gorm.io/datatypes"

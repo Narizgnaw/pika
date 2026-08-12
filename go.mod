@@ -1,10 +1,11 @@
-module github.com/dushixiang/pika
+module github.com/pika-monitor/pika
 
 go 1.26
 
 require (
 	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/fsnotify/fsnotify v1.10.1
+	github.com/glebarez/sqlite v1.11.0
 	github.com/go-errors/errors v1.5.1
 	github.com/go-orz/cache v0.0.5
 	github.com/go-orz/orz v0.4.2
@@ -37,6 +38,7 @@ require (
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/oauth2 v0.36.0
+	golang.org/x/text v0.40.0
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
@@ -51,7 +53,6 @@ require (
 	github.com/ebitengine/purego v0.10.2 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/glebarez/go-sqlite v1.22.0 // indirect
-	github.com/glebarez/sqlite v1.11.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-sql-driver/mysql v1.10.0 // indirect
@@ -87,7 +88,6 @@ require (
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gorm.io/driver/mysql v1.6.0 // indirect

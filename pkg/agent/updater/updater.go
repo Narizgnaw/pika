@@ -10,8 +10,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/dushixiang/pika/pkg/agent/config"
 	"github.com/minio/selfupdate"
+	"github.com/pika-monitor/pika/pkg/agent/config"
 )
 
 // VersionInfo 版本信息

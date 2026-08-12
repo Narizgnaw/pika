@@ -12,12 +12,12 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/dushixiang/pika/pkg/agent"
-	"github.com/dushixiang/pika/pkg/agent/config"
-	"github.com/dushixiang/pika/pkg/agent/sshmonitor"
-	"github.com/dushixiang/pika/pkg/agent/sysutil"
-	"github.com/dushixiang/pika/pkg/agent/updater"
 	"github.com/kardianos/service"
+	"github.com/pika-monitor/pika/pkg/agent"
+	"github.com/pika-monitor/pika/pkg/agent/config"
+	"github.com/pika-monitor/pika/pkg/agent/sshmonitor"
+	"github.com/pika-monitor/pika/pkg/agent/sysutil"
+	"github.com/pika-monitor/pika/pkg/agent/updater"
 )
 
 // program 实现 service.Interface

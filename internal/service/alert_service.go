@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dushixiang/pika/internal/models"
-	"github.com/dushixiang/pika/internal/protocol"
-	"github.com/dushixiang/pika/internal/repo"
 	"github.com/go-orz/orz"
+	"github.com/pika-monitor/pika/internal/models"
+	"github.com/pika-monitor/pika/internal/protocol"
+	"github.com/pika-monitor/pika/internal/repo"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
