@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { App, Button, Card, Form, InputNumber, Space, Switch } from 'antd';
+import { App, Button, Card, Form, InputNumber, Switch } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AlertConfig } from '@/api/property';
 import { getAlertConfig, saveAlertConfig } from '@/api/property';
@@ -43,7 +43,7 @@ const AlertSettings = () => {
     return (
         <div>
             <Form form={form}>
-                <Space direction="vertical" className="w-full">
+                <div className="flex w-full min-w-0 flex-col gap-4">
                     <Card title="基本信息" type="inner">
                         <Form.Item label="启用告警" name="enabled" valuePropName="checked">
                             <Switch checkedChildren="开启" unCheckedChildren="关闭" />
@@ -237,7 +237,7 @@ const AlertSettings = () => {
                     >
                         保存配置
                     </Button>
-                </Space>
+                </div>
             </Form>
         </div>
     );

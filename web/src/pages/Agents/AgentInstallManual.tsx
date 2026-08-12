@@ -1,5 +1,5 @@
 import React, { type ReactElement, useMemo, useState } from 'react';
-import { App, Button, Card, Space, Tabs, Typography } from 'antd';
+import {App, Button, Card, Space, Typography} from 'antd';
 import { CopyIcon } from 'lucide-react';
 import copy from 'copy-to-clipboard';
 import linuxPng from '../../assets/os/linux.png';
@@ -16,7 +16,6 @@ import {
 import { useAgentInstallConfig } from './useAgentInstallConfig';
 
 const { Text } = Typography;
-const { TabPane } = Tabs;
 
 type OSType = 'linux-amd64' | 'linux-arm64' | 'linux-loong64' | 'darwin-amd64' | 'darwin-arm64' | 'windows-amd64' | 'windows-arm64';
 
@@ -142,9 +141,12 @@ curl -L "${backendServerUrl}${config.downloadUrl}?key=${selectedApiKey}" -o ${AG
         ];
     };
 
+    const selectedOSConfig = osConfigs[selectedOS];
+    const selectedOSSteps = getManualInstallSteps(selectedOS);
+
     return (
         <AgentInstallLayout activeKey="manual">
-            <Space direction="vertical" className="w-full">
+            <Space orientation={'vertical'} className={'w-full'}>
                 <ApiChooser
                     apiKeys={apiKeys}
                     selectedApiKey={selectedApiKeyId}
@@ -156,52 +158,66 @@ curl -L "${backendServerUrl}${config.downloadUrl}?key=${selectedApiKey}" -o ${AG
                         setSelectedApiKeyId(apiKey.id);
                     }}
                 />
-                <Tabs
-                    activeKey={selectedOS}
-                    onChange={(key) => setSelectedOS(key as OSType)}
-                >
-                    {Object.entries(osConfigs).map(([key, config]) => (
-                        <TabPane
-                            tab={
-                                <div className="flex items-center gap-2">
+                <Card title="选择系统与架构">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                        {Object.entries(osConfigs).map(([key, config]) => {
+                            const active = key === selectedOS;
+                            return (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => setSelectedOS(key as OSType)}
+                                    className={active
+                                        ? 'flex min-h-11 items-center gap-2 rounded-lg border border-[#1677ff] bg-[#eaf2ff] px-3 text-left text-[13px] font-semibold text-[#145dcc] dark:border-[#4086e8] dark:bg-[#1677ff]/15 dark:text-[#75adff]'
+                                        : 'flex min-h-11 items-center gap-2 rounded-lg border border-[#d9dee7] bg-transparent px-3 text-left text-[13px] text-[#4e5969] hover:border-[#8dbbfa] hover:bg-[#f7faff] dark:border-[#30343d] dark:text-[#b7bcc5] dark:hover:border-[#42689c] dark:hover:bg-[#20242c]'}
+                                >
                                     {config.icon}
                                     <span>{config.name}</span>
-                                </div>
-                            }
-                            key={key}
-                        >
-                            <Space direction="vertical" className="w-full">
-                                <Card type="inner" title="手动安装步骤">
-                                    <Space direction="vertical" className="w-full" size="middle">
-                                        {getManualInstallSteps(key as OSType).map((step, index) => (
-                                            <div key={index}>
-                                                <Text strong
-                                                    className="block mb-2 text-gray-900 dark:text-slate-100">{step.title}</Text>
-                                                <pre
-                                                    className="m-0 overflow-auto text-sm bg-gray-50 dark:bg-slate-800 p-3 rounded text-gray-900 dark:text-slate-100">
-                                                    <code>{step.command}</code>
-                                                </pre>
-                                                <Button
-                                                    type="link"
-                                                    onClick={() => void copyToClipboard(step.command)}
-                                                    icon={<CopyIcon className="h-4 w-4" />}
-                                                    size="small"
-                                                    style={{ margin: 0, padding: 0 }}
-                                                    disabled={!selectedApiKey}
-                                                >
-                                                    复制
-                                                </Button>
-                                            </div>
-                                        ))}
-                                    </Space>
-                                </Card>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </Card>
 
-                                <ServiceHelper os={key} />
-                                <ConfigHelper />
-                            </Space>
-                        </TabPane>
-                    ))}
-                </Tabs>
+                <Card title={`${selectedOSConfig.name} 安装步骤`}>
+                    <div className="space-y-5">
+                        {selectedOSSteps.map((step, index) => (
+                            <div
+                                key={step.title}
+                                className="grid gap-3 border-b border-slate-200 pb-5 last:border-0 last:pb-0 dark:border-slate-700 lg:grid-cols-[150px_minmax(0,1fr)]"
+                            >
+                                <div className="flex items-start gap-2">
+                                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#eaf2ff] text-xs font-semibold text-[#145dcc] dark:bg-[#1677ff]/15 dark:text-[#75adff]">
+                                        {index + 1}
+                                    </span>
+                                    <Text strong className="pt-0.5 text-gray-900 dark:text-slate-100">
+                                        {step.title.replace(/^\d+\.\s*/, '')}
+                                    </Text>
+                                </div>
+                                <div className="min-w-0">
+                                    <pre className="m-0 overflow-auto rounded-lg border border-slate-200 bg-slate-950 p-4 text-[13px] leading-6 text-slate-100 dark:border-slate-700">
+                                        <code>{step.command}</code>
+                                    </pre>
+                                    <Button
+                                        type="link"
+                                        onClick={() => void copyToClipboard(step.command)}
+                                        icon={<CopyIcon className="h-4 w-4"/>}
+                                        size="small"
+                                        style={{margin: '8px 0 0', padding: 0}}
+                                        disabled={!selectedApiKey}
+                                    >
+                                        复制
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </Card>
+
+                <div className="grid items-start gap-4 xl:grid-cols-2">
+                    <ServiceHelper os={selectedOS}/>
+                    <ConfigHelper/>
+                </div>
             </Space>
         </AgentInstallLayout>
     );

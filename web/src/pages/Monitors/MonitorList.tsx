@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
 import {useSearchParams} from 'react-router-dom';
-import {App, Button, Divider, Input, Space, Table, Tag} from 'antd';
+import {App, Button, Divider, Input, Space, Tag} from 'antd';
 import type {ColumnsType, TablePaginationConfig} from 'antd/es/table';
 import {Edit, Plus, RefreshCw, Trash2} from 'lucide-react';
 import dayjs from 'dayjs';
@@ -9,6 +9,7 @@ import {deleteMonitor, listMonitors} from '@/api/monitor.ts';
 import type {MonitorTask} from '@/types';
 import {getErrorMessage} from '@/lib/utils';
 import {PageHeader} from '@/components/PageHeader';
+import {AdminDataTable} from '@/components/AdminDataTable';
 import MonitorModal from './MonitorModal';
 
 const MonitorList = () => {
@@ -232,7 +233,20 @@ const MonitorList = () => {
         <div className="space-y-6">
             <PageHeader
                 title="服务监控"
-                description="配置 HTTP/TCP/ICMP 服务可用性检测，集中管理监控策略与探针覆盖范围"
+                extra={(
+                    <Input.Search
+                        placeholder="按名称或目标搜索"
+                        allowClear
+                        value={searchValue}
+                        onChange={(event) => {
+                            const nextValue = event.target.value;
+                            setSearchValue(nextValue);
+                            if (!nextValue) handleKeywordSearch('');
+                        }}
+                        onSearch={(value) => handleKeywordSearch(value)}
+                        style={{width: 260}}
+                    />
+                )}
                 actions={[
                     {
                         key: 'create',
@@ -250,25 +264,7 @@ const MonitorList = () => {
                 ]}
             />
 
-            <div className="bg-white dark:bg-[#1c1c21] rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm p-4 sm:p-6 space-y-4">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <Input.Search
-                        placeholder="按名称或目标搜索"
-                        allowClear
-                        value={searchValue}
-                        onChange={(event) => {
-                            const nextValue = event.target.value;
-                            setSearchValue(nextValue);
-                            if (!nextValue) {
-                                handleKeywordSearch('');
-                            }
-                        }}
-                        onSearch={(value) => handleKeywordSearch(value)}
-                        className="w-full max-w-md"
-                    />
-                </div>
-
-                <Table<MonitorTask>
+            <AdminDataTable<MonitorTask>
                     columns={columns}
                     dataSource={dataSource}
                     loading={isLoading || isFetching}
@@ -283,8 +279,7 @@ const MonitorList = () => {
                         showTotal: (count) => `共 ${count} 条`,
                     }}
                     onChange={handleTableChange}
-                />
-            </div>
+            />
 
             <MonitorModal
                 open={modalVisible}

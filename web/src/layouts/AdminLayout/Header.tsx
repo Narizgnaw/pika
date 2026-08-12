@@ -1,11 +1,12 @@
 import {type RefObject} from 'react';
-import {useNavigate} from 'react-router-dom';
+import {useLocation, useNavigate} from 'react-router-dom';
 import type {MenuProps} from 'antd';
-import {App as AntApp, Avatar, Button, Dropdown, Space} from 'antd';
-import {BookOpen, Eye, LogOut, Moon, Sun, User as UserIcon} from 'lucide-react';
+import {App as AntApp, Avatar, Button, Dropdown, Tooltip} from 'antd';
+import {BookOpen, ChevronRight, Eye, LogOut, Moon, Sun, User as UserIcon} from 'lucide-react';
 import {logout} from '@/api/auth';
 import {useRuntimeConfig} from '@/api/runtime';
 import type {User} from '@/types';
+import {menuItems} from './menu';
 
 interface HeaderProps {
     userInfo: User | null;
@@ -16,8 +17,13 @@ interface HeaderProps {
 
 export const AdminHeader = ({userInfo, appliedTheme, themeButtonRef, onToggleTheme}: HeaderProps) => {
     const navigate = useNavigate();
+    const location = useLocation();
     const {message: messageApi, modal} = AntApp.useApp();
     const {data: runtime} = useRuntimeConfig();
+    const activeItem = menuItems.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
+    const currentPageLabel = location.pathname.startsWith('/admin/agents-install/')
+        ? '部署指南'
+        : activeItem?.label || '管理后台';
 
     const handleLogout = () => {
         modal.confirm({
@@ -41,61 +47,71 @@ export const AdminHeader = ({userInfo, appliedTheme, themeButtonRef, onToggleThe
     ];
 
     return (
-        <header className="fixed top-0 left-0 right-0 z-[300] h-14 border-b border-white/20 dark:border-white/10 bg-[#060b16]/95 dark:bg-[#141414]/95 backdrop-blur">
-            <div className="flex h-full items-center justify-between px-4">
-                <div className="flex items-center gap-3 text-white">
-                    <div className="flex items-center justify-center">
+        <header className="fixed inset-x-0 top-0 z-[300] h-[60px] border-b border-[#e8ebf0] bg-white/95 backdrop-blur-xl dark:border-[#272b33] dark:bg-[#0f1115]/95 lg:left-[248px]">
+            <div className="flex h-full items-center gap-4 px-4 lg:px-8">
+                <div className="ml-[46px] flex min-w-0 items-center gap-2.5 lg:hidden">
+                    <div className="grid size-[38px] shrink-0 place-items-center overflow-hidden">
                         <img
                             src="/api/logo"
                             alt="Logo"
-                            className="h-10 w-10 object-contain rounded-md"
+                            className="size-[31px] object-contain"
                             onError={(e) => { e.currentTarget.src = '/logo.png'; }}
                         />
                     </div>
-                    <div>
-                        <p className="text-xs uppercase tracking-[0.3em] text-white/60">{runtime?.system.nameZh}</p>
-                        <p className="text-sm font-semibold">控制台</p>
+                    <div className="min-w-0 leading-[1.2]">
+                        <p className="m-0 overflow-hidden text-sm font-bold text-ellipsis whitespace-nowrap text-[#1f2329] dark:text-[#e6e8ec]">{runtime?.system.nameZh || 'Pika'}</p>
+                        <p className="mt-[3px] mb-0 text-[10px] text-slate-400 max-sm:hidden">管理控制台</p>
                     </div>
                 </div>
 
-                <Space size={8} className="flex h-full items-center">
+                <div className="hidden min-w-0 items-center gap-[7px] text-xs font-medium text-slate-400 lg:flex">
+                    <span>控制中心</span>
+                    <ChevronRight size={13}/>
+                    <span className="overflow-hidden text-ellipsis whitespace-nowrap text-[#4e5969] dark:text-[#b7bcc5]">{currentPageLabel}</span>
+                </div>
+
+                <div className="ml-auto flex items-center gap-1">
+                    <div className="max-sm:hidden">
+                        <Button
+                            type="text"
+                            icon={<Eye size={16} strokeWidth={2}/>}
+                            onClick={() => window.open('/', '_blank')}
+                            style={{color: appliedTheme === 'dark' ? '#cbd5e1' : '#646a73', fontSize: 12}}
+                        >
+                            公共页面
+                        </Button>
+                    </div>
                     <Button
                         type="text"
-                        icon={<Eye className="h-4 w-4" strokeWidth={2}/>}
-                        onClick={() => window.open('/', '_blank')}
-                        className="hidden !h-9 !items-center !rounded-full !px-3 !text-xs !text-white/80 hover:!bg-white/10 sm:!inline-flex"
-                    >
-                        公共页面
-                    </Button>
-                    <Button
-                        type="text"
-                        icon={<BookOpen className="h-4 w-4" strokeWidth={2}/>}
+                        icon={<BookOpen size={16} strokeWidth={2}/>}
                         onClick={() => navigate('/admin/agents-install/one-click')}
-                        className="!h-9 !items-center !rounded-full !px-3 !text-xs !text-white hover:!bg-blue-500/10"
+                        style={{color: appliedTheme === 'dark' ? '#cbd5e1' : '#646a73', fontSize: 12}}
                     >
                         部署指南
                     </Button>
 
-                    <button
-                        ref={themeButtonRef}
-                        type="button"
-                        onClick={onToggleTheme}
-                        className="inline-flex h-9 items-center rounded-full p-2 text-white/80 hover:bg-white/10 transition-all"
-                        title={appliedTheme === 'dark' ? '切换到浅色模式' : '切换到暗黑模式'}
-                    >
-                        {appliedTheme === 'dark' ? <Sun className="h-4 w-4" strokeWidth={2}/> : <Moon className="h-4 w-4" strokeWidth={2}/>}
-                    </button>
+                    <Tooltip title={appliedTheme === 'dark' ? '切换到浅色模式' : '切换到暗黑模式'}>
+                        <button
+                            ref={themeButtonRef}
+                            type="button"
+                            onClick={onToggleTheme}
+                            className="grid size-9 cursor-pointer place-items-center rounded-[9px] border-0 bg-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+                            aria-label={appliedTheme === 'dark' ? '切换到浅色模式' : '切换到暗黑模式'}
+                        >
+                            {appliedTheme === 'dark' ? <Sun size={17} strokeWidth={2}/> : <Moon size={17} strokeWidth={2}/>}
+                        </button>
+                    </Tooltip>
 
                     <Dropdown menu={{items: userMenuItems}} placement="bottomRight" trigger={['click']}>
                         <button
                             type="button"
-                            className="flex cursor-pointer items-center gap-2 rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-left text-white transition-colors hover:border-white/40"
+                            className="flex min-w-0 cursor-pointer items-center gap-2 rounded-[10px] border-0 bg-transparent py-[3px] pr-2 pl-1 text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                         >
-                            <Avatar size={24} icon={<UserIcon className="h-3.5 w-3.5" strokeWidth={2}/>} className="!bg-white/20"/>
-                            <span className="text-xs font-medium">{userInfo?.username || '访客'}</span>
+                            <Avatar size={28} icon={<UserIcon size={15} strokeWidth={2}/>} style={{background: '#dbeafe', color: '#2563eb'}}/>
+                            <span className="max-w-[120px] overflow-hidden text-xs font-semibold text-ellipsis whitespace-nowrap max-sm:hidden">{userInfo?.username || '访客'}</span>
                         </button>
                     </Dropdown>
-                </Space>
+                </div>
             </div>
         </header>
     );

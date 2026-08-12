@@ -249,13 +249,11 @@ const NotificationChannels = () => {
     return (
         <div>
             <div className="mb-4">
-                <h2 className="text-xl font-bold">通知渠道管理</h2>
-                <p className="text-gray-500 my-2">配置钉钉、企业微信、飞书和自定义Webhook通知渠道</p>
                 <Alert title="更改配置后，请点击下方的保存后再进行测试。" type="info" showIcon/>
             </div>
 
             <Form form={form} layout="vertical" onFinish={handleSave}>
-                <Space orientation={'vertical'} className={'w-full'}>
+                <div className="flex w-full min-w-0 flex-col gap-4">
                     {/* 钉钉通知 */}
                     <Card
                         title={
@@ -269,7 +267,6 @@ const NotificationChannels = () => {
                             </div>
                         }
                         type="inner"
-                        className="mb-4"
                         extra={
                             <Button
                                 type="link"
@@ -333,7 +330,6 @@ const NotificationChannels = () => {
                             </div>
                         }
                         type="inner"
-                        className="mb-4"
                         extra={
                             <Button
                                 type="link"
@@ -386,7 +382,6 @@ const NotificationChannels = () => {
                             </div>
                         }
                         type="inner"
-                        className="mb-4"
                         extra={
                             <Button
                                 type="link"
@@ -475,7 +470,6 @@ const NotificationChannels = () => {
                             </div>
                         }
                         type="inner"
-                        className="mb-4"
                         extra={
                             <Button
                                 type="link"
@@ -539,7 +533,6 @@ const NotificationChannels = () => {
                             </div>
                         }
                         type="inner"
-                        className="mb-4"
                         extra={
                             <Button
                                 type="link"
@@ -602,7 +595,6 @@ const NotificationChannels = () => {
                             </div>
                         }
                         type="inner"
-                        className="mb-4"
                         extra={
                             <Button
                                 type="link"
@@ -692,7 +684,6 @@ const NotificationChannels = () => {
                     <Card
                         title="自定义 Webhook"
                         type="inner"
-                        className="mb-4"
                         extra={
                             <Button
                                 type="link"
@@ -845,7 +836,7 @@ const NotificationChannels = () => {
                             保存配置
                         </Button>
                     </Form.Item>
-                </Space>
+                </div>
             </Form>
         </div>
     );

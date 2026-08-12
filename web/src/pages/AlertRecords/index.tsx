@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import {useSearchParams} from 'react-router-dom';
-import {App, Divider, Select, Space, Table, Tag} from 'antd';
+import {App, Divider, Select, Tag} from 'antd';
 import type {ColumnsType, TablePaginationConfig} from 'antd/es/table';
 import {Trash2} from 'lucide-react';
 import {clearAlertRecords, getAlertRecords} from '@/api/alert.ts';
@@ -8,6 +8,7 @@ import type {AlertRecord} from '@/types';
 import dayjs from 'dayjs';
 import {getErrorMessage} from '@/lib/utils';
 import {PageHeader} from '@/components/PageHeader';
+import {AdminDataTable} from '@/components/AdminDataTable';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {listAgentsByAdmin} from "@/api/agent.ts";
 
@@ -260,7 +261,20 @@ const AlertRecordList = () => {
         <div className={'space-y-6'}>
             <PageHeader
                 title="告警记录"
-                description="查看和管理系统的告警记录"
+                extra={(
+                    <Select
+                        placeholder="选择探针"
+                        allowClear
+                        showSearch={{
+                            filterOption: (inputValue, option) =>
+                                (option?.label?.toString() ?? '').toLowerCase().includes(inputValue.toLowerCase()),
+                        }}
+                        style={{width: 200}}
+                        value={selectedAgentId || undefined}
+                        onChange={handleAgentChange}
+                        options={agentOptions}
+                    />
+                )}
                 actions={[
                     {
                         key: 'clear',
@@ -273,32 +287,11 @@ const AlertRecordList = () => {
                 ]}
             />
 
-            <div className="bg-white dark:bg-[#1c1c21] rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm p-4 sm:p-6 space-y-4">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <Space>
-                        <Select
-                            placeholder="选择探针"
-                            allowClear
-                            showSearch={{
-                                filterOption: (inputValue, option) =>
-                                    (option?.label?.toString() ?? '')
-                                        .toLowerCase()
-                                        .includes(inputValue.toLowerCase()),
-                            }}
-                            style={{width: 200}}
-                            value={selectedAgentId || undefined}
-                            onChange={handleAgentChange}
-                            options={agentOptions}
-                        />
-                    </Space>
-                </div>
-
-                <Table<AlertRecord>
+            <AdminDataTable<AlertRecord>
                     columns={columns}
                     dataSource={alertPaging?.items || []}
                     loading={isLoading || isFetching}
                     rowKey="id"
-                    size={'small'}
                     scroll={{x: 1700}}
                     tableLayout="fixed"
                     pagination={{
@@ -311,8 +304,7 @@ const AlertRecordList = () => {
                         showTotal: (total) => `共 ${total} 条`,
                     }}
                     onChange={handleTableChange}
-                />
-            </div>
+            />
         </div>
     );
 };

@@ -135,14 +135,9 @@ const PublicIPConfigComponent = ({defaultIPv4APIs, defaultIPv6APIs}: PublicIPCon
 
     return (
         <div>
-            <div className="mb-4">
-                <h2 className="text-xl font-bold">公网 IP 采集</h2>
-                <p className="text-gray-500 mt-2">通过 HTTP 接口采集探针公网 IPv4/IPv6 地址</p>
-            </div>
-
             <Form form={form} layout="vertical" onFinish={handleSave}>
-                <Space direction={'vertical'} className={'w-full'}>
-                    <Card title="采集设置" type="inner" className="mb-4">
+                <div className="flex w-full min-w-0 flex-col gap-4">
+                    <Card title="采集设置" type="inner">
                         <div className="flex flex-wrap items-center gap-6">
                             <Form.Item label="启用采集" name="enabled" valuePropName="checked">
                                 <Switch/>
@@ -157,7 +152,7 @@ const PublicIPConfigComponent = ({defaultIPv4APIs, defaultIPv6APIs}: PublicIPCon
                         </div>
                     </Card>
 
-                    <Card title="IPv4 配置" type="inner" className="mb-4">
+                    <Card title="IPv4 配置" type="inner">
                         <Form.Item label="启用 IPv4" name="ipv4Enabled" valuePropName="checked">
                             <Switch/>
                         </Form.Item>
@@ -200,7 +195,7 @@ const PublicIPConfigComponent = ({defaultIPv4APIs, defaultIPv6APIs}: PublicIPCon
                         </Form.Item>
                     </Card>
 
-                    <Card title="IPv6 配置" type="inner" className="mb-4">
+                    <Card title="IPv6 配置" type="inner">
                         <Form.Item label="启用 IPv6" name="ipv6Enabled" valuePropName="checked">
                             <Switch/>
                         </Form.Item>
@@ -256,7 +251,7 @@ const PublicIPConfigComponent = ({defaultIPv4APIs, defaultIPv6APIs}: PublicIPCon
                             </Button>
                         </Space>
                     </Form.Item>
-                </Space>
+                </div>
             </Form>
         </div>
     );

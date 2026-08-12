@@ -1,7 +1,7 @@
 import {useMemo, useState} from 'react';
 import {Link, useNavigate} from 'react-router-dom';
 import type {MenuProps} from 'antd';
-import {App, Button, Divider, Dropdown, Form, Input, Select, Space, Table, Tag, message} from 'antd';
+import {App, Button, Divider, Dropdown, Form, Input, Select, Space, Tag, message} from 'antd';
 import type {ColumnsType} from 'antd/es/table';
 import {Edit, Eye, EyeOff, FileWarning, Lock, MoreVertical, Plus, RefreshCw, Shield, Tags, Trash2} from 'lucide-react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
@@ -10,6 +10,7 @@ import {deleteAgent, getTags, listAgentsByAdmin} from '@/api/agent.ts';
 import type {Agent} from '@/types';
 import {getErrorMessage} from '@/lib/utils';
 import {PageHeader} from '@/components/PageHeader';
+import {AdminDataTable} from '@/components/AdminDataTable';
 import AgentEditModal from './AgentEditModal';
 import BatchTagsModal from './BatchTagsModal';
 import BatchTamperProtectionModal from './BatchTamperProtectionModal';
@@ -450,40 +451,59 @@ const AgentList = () => {
         },
     ];
 
+    const batchMenuItems: MenuProps['items'] = [
+        {key: 'tags', icon: <Tags size={15}/>, label: '修改标签', onClick: handleBatchTags},
+        {key: 'visibility', icon: <EyeOff size={15}/>, label: '修改可见性', onClick: handleBatchVisibility},
+        {key: 'tamper', icon: <FileWarning size={15}/>, label: '配置防篡改保护', onClick: handleBatchTamperConfig},
+        {key: 'ssh', icon: <Lock size={15}/>, label: '配置 SSH 登录监控', onClick: handleBatchSSHConfig},
+    ];
+
     return (
         <div className="space-y-6">
             <PageHeader
                 title="探针管理"
-                description="管理和监控系统探针状态"
+                extra={(
+                    <>
+                        <Form
+                            form={searchForm}
+                            layout="inline"
+                            onFinish={handleSearch}
+                            className="min-w-0 max-sm:w-full"
+                            style={{display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8}}
+                        >
+                            <Form.Item name="keyword" style={{margin: 0}}>
+                                <Input
+                                    allowClear
+                                    placeholder="搜索名称、主机名或 IP"
+                                    style={{width: 220}}
+                                />
+                            </Form.Item>
+                            <Form.Item name="status" style={{margin: 0}}>
+                                <Select
+                                    placeholder="全部状态"
+                                    allowClear
+                                    style={{width: 112}}
+                                    options={[
+                                        {label: '在线', value: 'online'},
+                                        {label: '离线', value: 'offline'},
+                                    ]}
+                                />
+                            </Form.Item>
+                            <Form.Item style={{margin: 0}}>
+                                <Space size={8}>
+                                    <Button type="primary" htmlType="submit">查询</Button>
+                                    <Button onClick={handleReset}>重置</Button>
+                                </Space>
+                            </Form.Item>
+                        </Form>
+                        <Dropdown menu={{items: batchMenuItems}} trigger={['click']} disabled={selectedRowKeys.length === 0}>
+                            <Button icon={<Tags size={16}/>} disabled={selectedRowKeys.length === 0}>
+                                批量操作{selectedRowKeys.length > 0 ? ` (${selectedRowKeys.length})` : ''}
+                            </Button>
+                        </Dropdown>
+                    </>
+                )}
                 actions={[
-                    {
-                        key: 'batch-tags',
-                        label: `批量操作标签${selectedRowKeys.length > 0 ? ` (${selectedRowKeys.length})` : ''}`,
-                        icon: <Tags size={16}/>,
-                        onClick: handleBatchTags,
-                        disabled: selectedRowKeys.length === 0,
-                    },
-                    {
-                        key: 'batch-visibility',
-                        label: `批量修改可见性${selectedRowKeys.length > 0 ? ` (${selectedRowKeys.length})` : ''}`,
-                        icon: <EyeOff size={16}/>,
-                        onClick: handleBatchVisibility,
-                        disabled: selectedRowKeys.length === 0,
-                    },
-                    {
-                        key: 'batch-tamper',
-                        label: `批量配置防篡改保护${selectedRowKeys.length > 0 ? ` (${selectedRowKeys.length})` : ''}`,
-                        icon: <FileWarning size={16}/>,
-                        onClick: handleBatchTamperConfig,
-                        disabled: selectedRowKeys.length === 0,
-                    },
-                    {
-                        key: 'batch-ssh',
-                        label: `批量配置 SSH 登录监控${selectedRowKeys.length > 0 ? ` (${selectedRowKeys.length})` : ''}`,
-                        icon: <Lock size={16}/>,
-                        onClick: handleBatchSSHConfig,
-                        disabled: selectedRowKeys.length === 0,
-                    },
                     {
                         key: 'register',
                         label: '注册探针',
@@ -500,66 +520,36 @@ const AgentList = () => {
                 ]}
             />
 
-            <div className="bg-white dark:bg-[#1c1c21] rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm p-4 sm:p-6 space-y-6">
-                <div className="flex flex-col gap-4">
-                    <Form form={searchForm} layout="inline" onFinish={handleSearch} className="!flex-wrap gap-y-4">
-                        <Form.Item label="关键字" name="keyword">
-                            <Input placeholder="名称/主机名/通信地址/IPv4/IPv6" style={{width: 260}}/>
-                        </Form.Item>
-                        <Form.Item label="状态" name="status">
-                            <Select
-                                placeholder="请选择状态"
-                                allowClear
-                                style={{width: 140}}
-                                options={[
-                                    {label: '在线', value: 'online'},
-                                    {label: '离线', value: 'offline'},
-                                ]}
-                            />
-                        </Form.Item>
-                        <Form.Item>
-                            <Space>
-                                <Button type="primary" htmlType="submit">
-                                    查询
-                                </Button>
-                                <Button onClick={handleReset}>
-                                    重置
-                                </Button>
-                            </Space>
-                        </Form.Item>
-                    </Form>
-
-                    {tags.length > 0 && (
-                        <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-gray-50 dark:border-white/5 mt-2">
-                            <span className="text-sm text-gray-500 dark:text-gray-400">标签筛选：</span>
-                            <Tag.CheckableTag
-                                checked={selectedTags.length === 0}
-                                onChange={() => setSelectedTags([])}
-                                className="!rounded-full"
-                            >
-                                全部
-                            </Tag.CheckableTag>
-                            {tags.map((tag) => (
-                                <Tag.CheckableTag
-                                    key={tag}
-                                    checked={selectedTags.includes(tag)}
-                                    onChange={(checked) => {
-                                        if (checked) {
-                                            setSelectedTags([...selectedTags, tag]);
-                                        } else {
-                                            setSelectedTags(selectedTags.filter(t => t !== tag));
-                                        }
-                                    }}
-                                    className="!rounded-full"
-                                >
-                                    {tag}
-                                </Tag.CheckableTag>
-                            ))}
-                        </div>
-                    )}
+            {tags.length > 0 && (
+                <div className="flex min-h-7 flex-wrap items-center gap-1.5">
+                    <span className="text-xs text-[#646a73] dark:text-[#9ba1ab]">标签：</span>
+                    <Tag.CheckableTag
+                        checked={selectedTags.length === 0}
+                        onChange={() => setSelectedTags([])}
+                        style={{borderRadius: 6, margin: 0}}
+                    >
+                        全部
+                    </Tag.CheckableTag>
+                    {tags.map((tag) => (
+                        <Tag.CheckableTag
+                            key={tag}
+                            checked={selectedTags.includes(tag)}
+                            onChange={(checked) => {
+                                if (checked) {
+                                    setSelectedTags([...selectedTags, tag]);
+                                } else {
+                                    setSelectedTags(selectedTags.filter(t => t !== tag));
+                                }
+                            }}
+                            style={{borderRadius: 6, margin: 0}}
+                        >
+                            {tag}
+                        </Tag.CheckableTag>
+                    ))}
                 </div>
+            )}
 
-                <Table<Agent>
+            <AdminDataTable<Agent>
                     columns={columns}
                     dataSource={filteredAgents}
                     loading={isLoading || isFetching}
@@ -571,9 +561,8 @@ const AgentList = () => {
                         onChange: (keys) => setSelectedRowKeys(keys),
                         preserveSelectedRowKeys: true,
                     }}
-                    pagination={false}
-                />
-            </div>
+                pagination={false}
+            />
 
             <AgentEditModal
                 open={editModalVisible}

@@ -1,64 +1,59 @@
 import {useLocation, useNavigate} from 'react-router-dom';
-import {menuItems, SIDEBAR_WIDTH, HEADER_HEIGHT} from './menu';
+import {menuItems} from './menu';
 import {cn} from '@/lib/utils';
 import {useRuntimeConfig} from '@/api/runtime';
-import type {VersionInfo} from '@/api/version';
 
-export const AdminSider = ({version}: {version?: VersionInfo}) => {
+export const AdminSider = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const {data: runtime} = useRuntimeConfig();
 
     return (
-        <aside
-            className="fixed left-0 z-[200] hidden h-screen overflow-hidden border-r border-white/60 dark:border-white/10 bg-white/90 dark:bg-[#141414]/90 shadow-sm backdrop-blur lg:block"
-            style={{width: SIDEBAR_WIDTH, paddingTop: HEADER_HEIGHT}}
-        >
+        <aside className="fixed inset-y-0 left-0 z-[320] hidden w-[248px] overflow-hidden bg-[#18202d] text-white dark:bg-[#111827] lg:block">
             <div className="flex h-full flex-col">
-                <div className="px-4 py-4">
-                    <p className="text-xs uppercase tracking-[0.3em] text-gray-400 dark:text-slate-500">导航</p>
-                    <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">管理面板</p>
+                <div className="flex h-[60px] shrink-0 items-center gap-[11px] border-b border-white/[0.09] px-4">
+                    <div className="grid size-9 shrink-0 place-items-center">
+                        <img
+                            src="/api/logo"
+                            alt="Logo"
+                            className="size-[27px] object-contain"
+                            onError={(event) => { event.currentTarget.src = '/logo.png'; }}
+                        />
+                    </div>
+                    <div className="min-w-0 leading-[1.2]">
+                        <div className="overflow-hidden text-sm font-semibold tracking-[0.02em] text-ellipsis whitespace-nowrap text-white">{runtime?.system.nameZh || 'Pika'}</div>
+                        <div className="mt-1 overflow-hidden text-[10px] font-medium tracking-[0.11em] text-ellipsis whitespace-nowrap uppercase text-blue-100/60">{runtime?.system.nameEn || 'Monitor'}</div>
+                    </div>
                 </div>
-                <nav className="flex-1 overflow-y-auto px-3 pb-6 space-y-1 thin-scrollbar">
+                <div className="px-[22px] pt-[18px] pb-2 text-[10px] font-semibold tracking-[0.13em] text-gray-200/45">管理</div>
+                <nav className="thin-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 pb-5">
                     {menuItems.map((item) => {
-                        const isActive = location.pathname.startsWith(item.path);
+                        const isActive = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
                         return (
                             <button
                                 key={item.key}
                                 type="button"
                                 onClick={() => navigate(item.path)}
                                 className={cn(
-                                    'group relative flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-sm transition-all cursor-pointer',
+                                    'flex min-h-[42px] cursor-pointer items-center gap-2.5 rounded-lg border-0 px-2.5 py-1.5 text-left text-[13px] transition-colors',
                                     isActive
-                                        ? 'bg-gradient-to-r from-blue-500/10 to-blue-500/5 text-blue-600 dark:text-blue-400 shadow-sm'
-                                        : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800',
+                                        ? 'bg-[#1677ff]/20 text-[#f4f8ff] hover:bg-[#1677ff]/20'
+                                        : 'bg-transparent text-gray-200/80 hover:bg-white/[0.06] hover:text-white',
                                 )}
+                                aria-current={isActive ? 'page' : undefined}
                             >
                                 <span className={cn(
-                                    'flex h-8 w-8 items-center justify-center rounded-xl bg-white dark:bg-slate-800 text-gray-500 dark:text-slate-400 shadow-sm',
-                                    isActive && 'bg-blue-600 dark:bg-blue-500 text-white',
+                                    'grid size-8 shrink-0 place-items-center bg-transparent',
+                                    isActive ? 'text-[#69a7ff]' : 'text-gray-200/65',
                                 )}>
                                     {item.icon}
                                 </span>
-                                <span className="truncate font-medium">{item.label}</span>
-                                {isActive && <span className="ml-auto text-[10px] uppercase text-blue-500 dark:text-blue-400">当前</span>}
+                                <span className="overflow-hidden font-semibold text-ellipsis whitespace-nowrap">{item.label}</span>
                             </button>
                         );
                     })}
                 </nav>
 
-                {version && (
-                    <div className="border-t border-gray-100 dark:border-slate-800 px-4 py-4">
-                        <div className="rounded-2xl bg-gray-50/90 dark:bg-slate-800/90 p-3 shadow-inner">
-                            <p className="text-[11px] uppercase tracking-[0.25em] text-gray-400 dark:text-slate-500">版本信息</p>
-                            <div className="mt-2">
-                                <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">Server: {version.version}</p>
-                                <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">Agent: {version.agentVersion}</p>
-                                <p className="text-[11px] text-gray-500 dark:text-slate-400 uppercase tracking-[0.1em]">{runtime?.system.nameEn}</p>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div>
         </aside>
     );

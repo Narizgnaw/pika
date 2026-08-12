@@ -1,8 +1,9 @@
 import React, { type ReactNode, useState } from 'react';
-import { Alert, Button, Card, Input, Select, Space, Typography } from 'antd';
+import { Alert, Button, Card, Input, Select, Typography } from 'antd';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import {ArrowLeft, Plus, TerminalSquare, Wrench} from 'lucide-react';
 import type { ApiKey } from '@/types';
+import {PageHeader} from '@/components/PageHeader';
 import ApiKeyModal from '../ApiKeys/ApiKeyModal';
 
 const { Paragraph, Text } = Typography;
@@ -31,37 +32,42 @@ export const AgentInstallLayout = ({ activeKey, children }: { activeKey: Install
     const navigate = useNavigate();
 
     return (
-        <Space direction="vertical" className="w-full" size="large">
-            <div className="flex gap-2 items-center">
-                <div
-                    className="text-sm cursor-pointer hover:underline text-gray-600 dark:text-slate-300"
-                    onClick={() => navigate(-1)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => e.key === 'Enter' && navigate(-1)}
-                >
-                    返回 |
-                </div>
-                <h1 className="text-2xl font-semibold text-gray-900 dark:text-slate-100">探针部署指南</h1>
+        <div className="space-y-4">
+            <PageHeader
+                title="探针部署指南"
+                actions={[{
+                    key: 'back',
+                    label: '返回探针列表',
+                    icon: <ArrowLeft size={16}/>,
+                    onClick: () => navigate('/admin/agents'),
+                }]}
+            />
+
+            <div className="flex items-center gap-1 rounded-[10px] border border-[#e8ebf0] bg-white p-1 dark:border-[#272b33] dark:bg-[#171a21]">
+                    <button
+                        type="button"
+                        onClick={() => navigate('/admin/agents-install/one-click')}
+                        className={activeKey === 'one-click'
+                            ? 'flex min-h-9 items-center gap-2 rounded-lg border-0 bg-[#eaf2ff] px-3 text-[13px] font-semibold text-[#145dcc] dark:bg-[#1677ff]/15 dark:text-[#75adff]'
+                            : 'flex min-h-9 items-center gap-2 rounded-lg border-0 bg-transparent px-3 text-[13px] text-[#646a73] hover:bg-[#f5f6f8] dark:text-[#9ba1ab] dark:hover:bg-[#20242c]'}
+                    >
+                        <TerminalSquare size={16}/>
+                        一键安装
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => navigate('/admin/agents-install/manual')}
+                        className={activeKey === 'manual'
+                            ? 'flex min-h-9 items-center gap-2 rounded-lg border-0 bg-[#eaf2ff] px-3 text-[13px] font-semibold text-[#145dcc] dark:bg-[#1677ff]/15 dark:text-[#75adff]'
+                            : 'flex min-h-9 items-center gap-2 rounded-lg border-0 bg-transparent px-3 text-[13px] text-[#646a73] hover:bg-[#f5f6f8] dark:text-[#9ba1ab] dark:hover:bg-[#20242c]'}
+                    >
+                        <Wrench size={16}/>
+                        手动安装
+                    </button>
             </div>
 
-            <Space size={8}>
-                <Button
-                    type={activeKey === 'one-click' ? 'primary' : 'default'}
-                    onClick={() => navigate('/admin/agents-install/one-click')}
-                >
-                    一键安装
-                </Button>
-                <Button
-                    type={activeKey === 'manual' ? 'primary' : 'default'}
-                    onClick={() => navigate('/admin/agents-install/manual')}
-                >
-                    手动安装
-                </Button>
-            </Space>
-
             {children}
-        </Space>
+        </div>
     );
 };
 
@@ -199,23 +205,22 @@ ${agentCmd} version`;
 };
 
 export const ServiceHelper = ({ os }: { os: string }) => (
-    <Card type="inner" title="服务管理命令">
+    <Card title="服务管理命令">
         <Paragraph type="secondary" className="mb-3 text-gray-600 dark:text-slate-400">
             注册完成后，您可以使用以下命令管理探针服务：
         </Paragraph>
-        <pre
-            className="m-0 overflow-auto text-sm bg-gray-50 dark:bg-slate-800 p-3 rounded text-gray-900 dark:text-slate-100">
+        <pre className="m-0 max-h-[320px] overflow-auto rounded-lg border border-slate-200 bg-slate-950 p-4 text-[13px] leading-6 text-slate-100 dark:border-slate-700">
             <code>{getCommonCommands(os)}</code>
         </pre>
     </Card>
 );
 
 export const ConfigHelper = () => (
-    <Card type="inner" title="配置文件说明">
+    <Card title="配置文件说明">
         <Paragraph className="text-gray-900 dark:text-slate-100">
             注册完成后，配置文件会保存在:
         </Paragraph>
-        <ul className="space-y-2 text-gray-600 dark:text-slate-400">
+        <ul className="m-0 space-y-2 pl-5 text-gray-600 dark:text-slate-400">
             <li>
                 <Text code>{CONFIG_PATH}</Text> - 配置文件路径
             </li>

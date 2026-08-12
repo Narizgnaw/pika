@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, App, Button, Card, Input, Select, Space, Spin, Typography } from 'antd';
+import { Alert, App, Button, Card, Input, Select, Spin, Typography } from 'antd';
 import { CopyIcon, Plus } from 'lucide-react';
 import copy from 'copy-to-clipboard';
 import { Link } from 'react-router-dom';
@@ -109,9 +109,10 @@ const AgentInstallOneClick = () => {
 
     return (
         <AgentInstallLayout activeKey="one-click">
-            <Space direction="vertical" className="w-full">
-                <Card type="inner" title="配置选项">
-                    <Space direction="vertical" className="w-full">
+            <div className="space-y-4">
+                <div className="grid items-start gap-4 xl:grid-cols-[minmax(360px,0.8fr)_minmax(0,1.2fr)]">
+                <Card title="安装配置">
+                    <div className="space-y-5">
                         <div>
                             <div className="mb-1 text-gray-600 dark:text-slate-400">
                                 服务端地址 <span className="text-xs text-gray-400">(必填)</span>
@@ -218,45 +219,39 @@ const AgentInstallOneClick = () => {
                                 allowClear
                             />
                         </div>
-                    </Space>
+                    </div>
                 </Card>
 
-                <Alert
-                    description="一键安装脚本仅支持 Linux/macOS 系统。"
-                    type="info"
-                    showIcon
-                    className="mt-2"
-                />
-                {!effectiveServerUrl && (
-                    <Alert
-                        description="请先配置服务端地址后再生成安装命令。"
-                        type="warning"
-                        showIcon
-                        className="mt-2"
-                    />
-                )}
-                <Card type="inner" title="一键安装">
+                <Card title="运行安装命令">
+                    <div className="mb-4 space-y-2">
+                        <Alert description="支持 Linux 和 macOS，脚本会自动识别系统与架构。" type="info" showIcon/>
+                        {!effectiveServerUrl && (
+                            <Alert description="请先配置服务端地址后再生成安装命令。" type="warning" showIcon/>
+                        )}
+                    </div>
                     <Paragraph type="secondary" className="mb-3 text-gray-600 dark:text-slate-400">
-                        脚本会自动检测系统架构并下载对应版本的探针，然后完成注册和安装。
+                        配置完成后，在目标服务器终端中执行以下命令：
                     </Paragraph>
-                    <pre
-                        className="m-0 overflow-auto text-sm bg-gray-50 dark:bg-slate-800 p-3 rounded text-gray-900 dark:text-slate-100">
-                        <code>{installCommand}</code>
+                    <pre className="m-0 min-h-28 overflow-auto rounded-lg border border-slate-200 bg-slate-950 p-4 text-[13px] leading-6 text-slate-100 dark:border-slate-700">
+                        <code>{installCommand || '# 完成左侧配置后生成安装命令'}</code>
                     </pre>
                     <Button
-                        type="link"
+                        type="primary"
                         onClick={() => void copyToClipboard(installCommand)}
                         icon={<CopyIcon className="h-4 w-4" />}
-                        style={{ margin: 0, padding: 0 }}
+                        style={{marginTop: 14}}
                         disabled={!selectedApiKey || !effectiveServerUrl}
                     >
                         复制命令
                     </Button>
                 </Card>
+                </div>
 
-                <ServiceHelper os={AGENT_NAME} />
-                <ConfigHelper />
-            </Space>
+                <div className="grid items-start gap-4 xl:grid-cols-2">
+                    <ServiceHelper os={AGENT_NAME}/>
+                    <ConfigHelper/>
+                </div>
+            </div>
 
             <ApiKeyModal
                 open={isCreateModalVisible}

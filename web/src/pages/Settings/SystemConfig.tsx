@@ -141,17 +141,11 @@ const SystemConfigComponent = () => {
 
     return (
         <div>
-            <div className="mb-4">
-                <h2 className="text-xl font-bold">系统配置</h2>
-                <p className="text-gray-500 mt-2">配置系统名称和 Logo，这些设置将在公共页面和管理后台显示</p>
-            </div>
-
             <Form form={form} layout="vertical" onFinish={handleSave}>
-                <Space direction={'vertical'} className={'w-full'}>
+                <div className="flex w-full min-w-0 flex-col gap-4">
                     <Card
                         title="系统基本信息"
                         type="inner"
-                        className="mb-4"
                     >
                         <div className={'flex items-center gap-2'}>
                             <Form.Item
@@ -229,7 +223,7 @@ const SystemConfigComponent = () => {
                             label="系统 Logo"
                             tooltip="上传系统 Logo，建议使用正方形图片，尺寸为 256x256 或更大，文件大小不超过 500KB"
                         >
-                            <Space direction="vertical" className="w-full">
+                            <Space orientation="vertical" className="w-full">
                                 <Upload
                                     accept="image/*"
                                     showUploadList={false}
@@ -247,7 +241,6 @@ const SystemConfigComponent = () => {
                     <Card
                         title="自定义代码"
                         type="inner"
-                        className="mb-4"
                     >
                         <Form.Item
                             label="自定义 CSS"
@@ -275,7 +268,6 @@ const SystemConfigComponent = () => {
                     <Card
                         title="预览效果"
                         type="inner"
-                        className="mb-4"
                     >
                         <Form.Item noStyle shouldUpdate>
                             {({ getFieldValue }) => {
@@ -334,7 +326,7 @@ const SystemConfigComponent = () => {
                             </Button>
                         </Space>
                     </Form.Item>
-                </Space>
+                </div>
             </Form>
         </div>
     );

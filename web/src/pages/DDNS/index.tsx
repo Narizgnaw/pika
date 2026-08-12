@@ -1,10 +1,11 @@
 import {useEffect, useState} from 'react';
 import {useSearchParams} from 'react-router-dom';
-import {App, Button, Divider, Dropdown, Input, Space, Table, Tag, Tooltip} from 'antd';
+import {App, Button, Divider, Dropdown, Input, Space, Tag, Tooltip} from 'antd';
 import type {ColumnsType} from 'antd/es/table';
 import type {MenuProps} from 'antd';
 import {PageHeader} from '@/components/PageHeader';
-import {Globe, MoreVertical, Plus, Settings} from 'lucide-react';
+import {AdminDataTable} from '@/components/AdminDataTable';
+import {Globe, MoreVertical, Plus, RefreshCw, Settings} from 'lucide-react';
 import dayjs from 'dayjs';
 import type {DDNSConfig} from '@/types';
 import {deleteDDNSConfig, disableDDNSConfig, enableDDNSConfig, getDDNSConfigs, triggerDDNSUpdate,} from '@/api/ddns';
@@ -39,6 +40,7 @@ const DDNSPage = () => {
         data: ddnsPaging,
         isLoading,
         isFetching,
+        refetch,
     } = useQuery({
         queryKey: ['admin', 'ddns', pageIndex, pageSize, keyword],
         queryFn: async () => {
@@ -269,20 +271,7 @@ const DDNSPage = () => {
         <div className="space-y-6">
             <PageHeader
                 title="DDNS 配置管理"
-                description="管理动态 DNS 配置，支持阿里云、腾讯云、Cloudflare、华为云等服务商，自动更新域名解析记录"
-                actions={[
-                    {
-                        key: 'provider',
-                        label: 'DNS Provider',
-                        icon: <Settings size={16}/>,
-                        type: 'primary',
-                        onClick: () => setProviderModalOpen(true),
-                    },
-                ]}
-            />
-
-            <div className="bg-white dark:bg-[#1c1c21] rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm p-4 sm:p-6 space-y-4">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                extra={(
                     <Input.Search
                         placeholder="按配置名称搜索"
                         allowClear
@@ -290,19 +279,37 @@ const DDNSPage = () => {
                         onChange={(event) => {
                             const nextValue = event.target.value;
                             setSearchValue(nextValue);
-                            if (!nextValue) {
-                                handleSearch('');
-                            }
+                            if (!nextValue) handleSearch('');
                         }}
                         onSearch={handleSearch}
-                        className="w-full max-w-md"
+                        style={{width: 240}}
                     />
-                    <Button type="primary" icon={<Plus size={16}/>} onClick={handleCreate}>
-                        新建配置
-                    </Button>
-                </div>
+                )}
+                actions={[
+                    {
+                        key: 'provider',
+                        label: 'DNS Provider',
+                        icon: <Settings size={16}/>,
+                        onClick: () => setProviderModalOpen(true),
+                    },
+                    {
+                        key: 'create',
+                        label: '新建配置',
+                        icon: <Plus size={16}/>,
+                        type: 'primary',
+                        onClick: handleCreate,
+                    },
+                    {
+                        key: 'refresh',
+                        label: '刷新',
+                        icon: <RefreshCw size={16}/>,
+                        onClick: () => refetch(),
+                        loading: isFetching,
+                    },
+                ]}
+            />
 
-                <Table<DDNSConfig>
+            <AdminDataTable<DDNSConfig>
                     columns={columns}
                     dataSource={ddnsPaging?.items || []}
                     loading={isLoading || isFetching}
@@ -316,8 +323,7 @@ const DDNSPage = () => {
                         showSizeChanger: true,
                     }}
                     onChange={handleTableChange}
-                />
-            </div>
+            />
 
             <DDNSModal
                 open={modalOpen}

@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
 import {useSearchParams, useNavigate} from 'react-router-dom';
-import {App, Button, Divider, Input, Popconfirm, Space, Table, Tag} from 'antd';
+import {App, Button, Divider, Input, Popconfirm, Space, Tag} from 'antd';
 import type {ColumnsType, TablePaginationConfig} from 'antd/es/table';
 import {Copy, Edit, Loader2, Plus, RefreshCw, Terminal, Trash2} from 'lucide-react';
 import {deleteApiKey, disableApiKey, enableApiKey, getApiKeyRaw, listApiKeys} from '@/api/apiKey.ts';
@@ -8,6 +8,7 @@ import type {ApiKey} from '@/types';
 import dayjs from 'dayjs';
 import {getErrorMessage} from '@/lib/utils';
 import {PageHeader} from '@/components/PageHeader';
+import {AdminDataTable} from '@/components/AdminDataTable';
 import copy from 'copy-to-clipboard';
 import ApiKeyModal from './ApiKeyModal';
 import ShowApiKeyModal from './ShowApiKeyModal';
@@ -242,7 +243,20 @@ const ApiKeyList = () => {
         <div className="space-y-6">
             <PageHeader
                 title="通信密钥管理"
-                description="管理探针连接所需的通信密钥，用于验证探针注册与数据上报"
+                extra={(
+                    <Input.Search
+                        placeholder="按名称搜索"
+                        allowClear
+                        value={searchValue}
+                        onChange={(event) => {
+                            const nextValue = event.target.value;
+                            setSearchValue(nextValue);
+                            if (!nextValue) handleSearch('');
+                        }}
+                        onSearch={handleSearch}
+                        style={{width: 240}}
+                    />
+                )}
                 actions={[
                     {
                         key: 'deploy',
@@ -266,25 +280,7 @@ const ApiKeyList = () => {
                 ]}
             />
 
-            <div className="bg-white dark:bg-[#1c1c21] rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm p-4 sm:p-6 space-y-4">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <Input.Search
-                        placeholder="按名称搜索"
-                        allowClear
-                        value={searchValue}
-                        onChange={(event) => {
-                            const nextValue = event.target.value;
-                            setSearchValue(nextValue);
-                            if (!nextValue) {
-                                handleSearch('');
-                            }
-                        }}
-                        onSearch={handleSearch}
-                        className="w-full max-w-md"
-                    />
-                </div>
-
-                <Table<ApiKey>
+            <AdminDataTable<ApiKey>
                     columns={columns}
                     dataSource={apiKeyPaging?.items || []}
                     loading={isLoading || isFetching}
@@ -298,8 +294,7 @@ const ApiKeyList = () => {
                         showSizeChanger: true,
                     }}
                     onChange={handleTableChange}
-                />
-            </div>
+            />
 
             <ApiKeyModal
                 open={isModalVisible}

@@ -5,7 +5,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {activateTheme, deleteTheme, listThemes, type ThemeInfo, uploadTheme} from '@/api/theme';
 import {getErrorMessage} from '@/lib/utils';
 
-const {Text, Paragraph, Title} = Typography;
+const {Text, Paragraph} = Typography;
 
 const ThemePreview = ({theme}: {theme: ThemeInfo}) => {
     const [source, setSource] = useState<string>();
@@ -122,14 +122,8 @@ const ThemeSettings = () => {
     ];
 
     return (
-        <div className="min-w-0">
-            <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                    <Title level={3} style={{margin: 0}}>主题管理</Title>
-                    <Paragraph type="secondary" style={{margin: '8px 0 0'}}>
-                        安装和切换完整的公开页面主题；管理后台始终使用官方界面。
-                    </Paragraph>
-                </div>
+        <div className="flex w-full min-w-0 flex-col gap-4">
+            <div className="flex justify-end">
                 <div className="shrink-0">
                     <Upload
                         accept=".zip,application/zip"
@@ -145,13 +139,11 @@ const ThemeSettings = () => {
                 </div>
             </div>
 
-            <div className="mb-6">
-                <Alert
-                    type="warning"
-                    showIcon
-                    title="只安装你信任的主题：第三方主题会在 Pika 同一域名下执行 JavaScript，安装前请确认来源可信。"
-                />
-            </div>
+            <Alert
+                type="warning"
+                showIcon
+                title="只安装你信任的主题：第三方主题会在 Pika 同一域名下执行 JavaScript，安装前请确认来源可信。"
+            />
 
             {themesQuery.isLoading ? (
                 <div className="flex min-h-72 items-center justify-center">

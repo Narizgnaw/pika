@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {useNavigate, useParams, useSearchParams} from 'react-router-dom';
 import type {TabsProps} from 'antd';
-import {Alert, Button, Card, Space, Spin, Tabs, Tag} from 'antd';
+import {Alert, Spin, Tabs, Tag} from 'antd';
 import {Activity, ArrowLeft, FileWarning, Lock, Shield, TrendingUp} from 'lucide-react';
 import {useQuery} from '@tanstack/react-query';
 import {getAgentForAdmin} from '@/api/agent.ts';
@@ -10,6 +10,8 @@ import AgentAudit from './AgentAudit';
 import TamperProtection from './TamperProtection';
 import SSHLoginMonitor from './SSHLoginMonitor';
 import TrafficStats from './TrafficStats';
+import {PageHeader} from '@/components/PageHeader';
+import {PagePanel} from '@/components/PagePanel';
 
 const AgentDetail = () => {
     const {id} = useParams<{ id: string }>();
@@ -133,38 +135,38 @@ const AgentDetail = () => {
 
     return (
         <div className="space-y-4 lg:space-y-6">
-            {/* 探针状态卡片 */}
-            <Card variant="outlined">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <Activity size={32} className="text-blue-500"/>
-                        <div>
-                            <h2 className="text-xl font-semibold m-0">{agent.name || agent.hostname}</h2>
-                            <Space className="mt-1">
-                                <span className="text-gray-500">{agent.hostname}</span>
-                                {agent.status === 1 ? (
-                                    <Tag color="success">在线</Tag>
-                                ) : (
-                                    <Tag color="error">离线</Tag>
-                                )}
-                            </Space>
+            <PageHeader
+                title={agent.name || agent.hostname}
+                actions={[{
+                    key: 'back',
+                    label: '返回列表',
+                    icon: <ArrowLeft size={16}/>,
+                    onClick: () => navigate('/admin/agents'),
+                }]}
+            />
+
+            <PagePanel>
+                <div className="flex items-center gap-3">
+                    <div className="grid h-10 w-10 place-items-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+                        <Activity size={21}/>
+                    </div>
+                    <div>
+                        <div className="text-sm font-medium text-gray-800 dark:text-gray-100">当前连接状态</div>
+                        <div className="mt-1">
+                            {agent.status === 1 ? <Tag color="success">在线</Tag> : <Tag color="error">离线</Tag>}
                         </div>
                     </div>
-                    <Button
-                        icon={<ArrowLeft size={16}/>}
-                        onClick={() => navigate('/admin/agents')}
-                    >
-                        返回列表
-                    </Button>
                 </div>
-            </Card>
+            </PagePanel>
 
             {/* Tabs 内容 */}
-            <Tabs
-                activeKey={activeTab}
-                onChange={setActiveTab}
-                items={tabItems}
-            />
+            <PagePanel>
+                <Tabs
+                    activeKey={activeTab}
+                    onChange={setActiveTab}
+                    items={tabItems}
+                />
+            </PagePanel>
         </div>
     );
 };

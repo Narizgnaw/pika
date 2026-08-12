@@ -18,7 +18,12 @@ const DDNSPage = lazy(() => import('@/pages/DDNS'));
 const AlertRecordListPage = lazy(() => import('@/pages/AlertRecords'));
 
 const lazyLoad = (Component: LazyExoticComponent<ComponentType<any>>) => (
-    <Suspense fallback={<div className="flex h-[75vh] items-center justify-center text-gray-500">页面加载中...</div>}>
+    <Suspense fallback={
+        <div className="flex min-h-[60vh] items-center justify-center gap-2.5 text-[13px] text-slate-500" role="status" aria-live="polite">
+            <span className="size-[18px] animate-spin rounded-full border-2 border-[#dbe4ee] border-t-[#1677ff]"/>
+            <span>页面加载中</span>
+        </div>
+    }>
         <Component/>
     </Suspense>
 );
