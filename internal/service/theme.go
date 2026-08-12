@@ -83,7 +83,7 @@ var (
 	themeIDPattern   = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 	reservedThemeIDs = map[string]struct{}{
 		"default": {}, "admin": {}, "official": {}, "system": {},
-		"api": {}, "assets": {}, "theme-assets": {},
+		"api": {}, "assets": {}, "t": {}, "theme-assets": {},
 	}
 	requiredThemeCaps = []string{"server-list", "server-detail", "monitor-list", "monitor-detail"}
 	titleElement      = regexp.MustCompile(`(?is)<title(?:\s[^>]*)?>.*?</title>`)
@@ -123,7 +123,7 @@ func NewThemeService(logger *zap.Logger, propertyService *PropertyService, cfg *
 		logger:          logger,
 		propertyService: propertyService,
 		themeDir:        themeDir,
-		defaultThemeDir: "portal",
+		defaultThemeDir: assets.DefaultThemeDir(),
 	}
 	if err := os.MkdirAll(filepath.Join(themeDir, ".staging"), 0755); err != nil {
 		return nil, fmt.Errorf("创建主题目录失败: %w", err)

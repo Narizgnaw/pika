@@ -8,8 +8,8 @@ import (
 
 const (
 	defaultWebDir   = "web/dist"
+	defaultThemeDir = "themes/default"
 	defaultAgentDir = "bin/agents"
-	defaultLogoPath = "portal/public/logo.png"
 )
 
 func WebDir() string {
@@ -17,6 +17,13 @@ func WebDir() string {
 		return dir
 	}
 	return defaultWebDir
+}
+
+func DefaultThemeDir() string {
+	if dir := os.Getenv("PIKA_DEFAULT_THEME_DIR"); dir != "" {
+		return dir
+	}
+	return defaultThemeDir
 }
 
 func AgentDir() string {
@@ -33,7 +40,7 @@ func AgentPath(filename string) string {
 func DefaultLogoBase64() string {
 	for _, path := range []string{
 		os.Getenv("PIKA_DEFAULT_LOGO_PATH"),
-		defaultLogoPath,
+		filepath.Join(DefaultThemeDir(), "dist", "logo.png"),
 		filepath.Join(WebDir(), "logo.png"),
 	} {
 		if path == "" {

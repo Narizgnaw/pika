@@ -18,13 +18,13 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// validateOfficialWebBuild 启动时验证官方 web/dist 完整性。
+// validateOfficialWebBuild 启动时验证官方管理前端和默认主题的发布产物完整性。
 func validateOfficialWebBuild(webDir, defaultThemeDir string) error {
 	if version.GetVersion() == "dev" && strings.TrimSpace(os.Getenv("PIKA_WEB_DIR")) == "" {
 		return nil
 	}
 	requiredFiles := []string{
-		filepath.Join(webDir, "admin", "index.html"),
+		filepath.Join(webDir, "index.html"),
 		filepath.Join(defaultThemeDir, "pika-theme.json"),
 		filepath.Join(defaultThemeDir, "dist", "index.html"),
 	}
@@ -34,9 +34,9 @@ func validateOfficialWebBuild(webDir, defaultThemeDir string) error {
 			return fmt.Errorf("官方 Web 构建缺失: %s", path)
 		}
 	}
-	assetStat, err := os.Stat(filepath.Join(webDir, "admin", "assets"))
+	assetStat, err := os.Stat(filepath.Join(webDir, "assets"))
 	if err != nil || !assetStat.IsDir() {
-		return fmt.Errorf("官方管理静态资源目录缺失: %s", filepath.Join(webDir, "admin", "assets"))
+		return fmt.Errorf("官方管理静态资源目录缺失: %s", filepath.Join(webDir, "assets"))
 	}
 	manifest, err := loadThemeManifest(filepath.Join(defaultThemeDir, "pika-theme.json"))
 	if err != nil {

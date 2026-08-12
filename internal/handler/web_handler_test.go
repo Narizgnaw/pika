@@ -91,26 +91,29 @@ func TestResolveStaticPathAndHeaders(t *testing.T) {
 
 func TestEchoWildcardRoutesKeepAdminAndAPISeparated(t *testing.T) {
 	webRoot := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(webRoot, "admin", "assets"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(webRoot, "assets"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(webRoot, "admin", "assets", "app.js"), []byte("admin"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(webRoot, "assets", "app.js"), []byte("admin"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(webRoot, "admin", "index.html"), []byte("<html>admin</html>"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(webRoot, "index.html"), []byte("<html>admin</html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PIKA_WEB_DIR", webRoot)
 
 	e := echo.New()
 	handler := &WebHandler{}
-	e.GET("/admin/assets/*", handler.ServeAdminAsset)
+	e.Static("/admin/assets/", filepath.Join(webRoot, "assets"), ImmutableStaticHeaders)
 	e.GET("/*", handler.ServeSPA)
 
 	assetRecorder := httptest.NewRecorder()
 	e.ServeHTTP(assetRecorder, httptest.NewRequest(http.MethodGet, "/admin/assets/app.js", nil))
 	if assetRecorder.Code != http.StatusOK || assetRecorder.Body.String() != "admin" {
 		t.Fatalf("wildcard asset route failed: status=%d body=%q", assetRecorder.Code, assetRecorder.Body.String())
+	}
+	if assetRecorder.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" {
+		t.Fatalf("admin asset missing immutable cache header: %#v", assetRecorder.Header())
 	}
 
 	adminRecorder := httptest.NewRecorder()

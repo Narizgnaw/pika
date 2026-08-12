@@ -17,12 +17,27 @@ LDFLAGS=-s -w -X 'github.com/pika-monitor/pika/pkg/version.Version=$(VERSION)' -
 AGENT_LDFLAGS=-s -w -X 'github.com/pika-monitor/pika/pkg/version.Version=$(VERSION)' -X 'github.com/pika-monitor/pika/pkg/version.AgentVersion=$(AGENT_VERSION)'
 GOFLAGS=CGO_ENABLED=0
 
-# 构建前端
+# 默认主题已拆分到独立仓库。本地默认使用同级目录，CI 会显式传入 checkout 目录。
+DEFAULT_THEME_DIR ?= ../pika-default-theme
+DEFAULT_THEME_OUTPUT_DIR ?= themes/default
+
+.PHONY: build-web build-default-theme
+
+# 构建官方管理前端和独立的默认主题，并组装到统一发布目录。
 build-web:
 	npm ci --prefix web
 	npm run build --prefix web
-	npm ci --prefix portal
-	npm run build --prefix portal
+	$(MAKE) build-default-theme
+
+build-default-theme:
+	test -f "$(DEFAULT_THEME_DIR)/package-lock.json"
+	test -f "$(DEFAULT_THEME_DIR)/pika-theme.json"
+	npm ci --prefix "$(DEFAULT_THEME_DIR)"
+	npm run build --prefix "$(DEFAULT_THEME_DIR)"
+	rm -rf "$(DEFAULT_THEME_OUTPUT_DIR)"
+	mkdir -p "$(DEFAULT_THEME_OUTPUT_DIR)"
+	cp "$(DEFAULT_THEME_DIR)/pika-theme.json" "$(DEFAULT_THEME_OUTPUT_DIR)/pika-theme.json"
+	cp -R "$(DEFAULT_THEME_DIR)/dist" "$(DEFAULT_THEME_OUTPUT_DIR)/dist"
 
 # 构建服务端（开发）
 build-server:
@@ -67,14 +82,15 @@ build-agents:
 
 # 构建所有（release版本）
 build-release:
-	make build-web
-	make build-agents
-	make build-servers
+	$(MAKE) build-web
+	$(MAKE) build-agents
+	$(MAKE) build-servers
 
 # 清理编译产物
 clean:
 	rm -rf bin/*
-	rm -rf web/dist portal/dist
+	rm -rf web/dist
+	rm -rf themes/default
 
 # 运行测试
 test:

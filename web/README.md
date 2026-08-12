@@ -2,24 +2,35 @@
 
 `web/` 是官方管理后台前端（React/Vite），发布到 `/admin/assets/*`。
 
-官方默认公开主题在仓库根目录的 `portal/`，是一个独立的项目，可以搬迁到单独的仓库。
+官方默认公开主题是独立项目 [`pika-monitor/pika-default-theme`](https://github.com/pika-monitor/pika-default-theme)。本地开发时，`Makefile` 默认从同级目录 `../pika-default-theme` 构建它。
 
 ## 开发
 
 ```bash
-cd web && npm ci && npm run dev      # 管理后台，http://localhost:5174/admin/
-cd portal && npm ci && npm run dev   # 默认主题，http://localhost:5173/
+cd web && npm ci && npm run dev                  # 管理后台，http://localhost:5174/admin/
+cd ../pika-default-theme && npm ci && npm run dev # 默认主题，http://localhost:5173/
 ```
 
 两者都把 `/api/*` 代理到 `http://localhost:8080`，可以同时启动。
 
 ## 构建
 
-`make build-web` 分别构建 `web/`（管理后台 → `web/dist/admin/`）和 `portal/`（默认主题 → `portal/dist/`）。后端直接从这两个目录读取，无需组装脚本。
+`make build-web` 构建 `web/` 和独立的默认主题，将两者放到独立的发布目录：
+
+- 管理后台：`web/dist/`；
+- 默认主题：`themes/default/`。
+
+如果主题源码不在默认位置，可以显式指定：
+
+```bash
+make DEFAULT_THEME_DIR=/path/to/pika-default-theme build-web
+```
+
+GitHub Actions 使用 `.github/default-theme.ref` 中的完整 Git Commit SHA 锁定默认主题，保证同一 Pika 版本的发布构建可复现。
 
 ## 运行路径
 
 - 公开主题：`/`、`/servers/*`、`/monitors/*`；
 - 管理后台：`/admin/*`，包括 `/admin/login` 和 OAuth/OIDC 回调；
 - 管理后台资源：`/admin/assets/*`；
-- 活动主题资源：`/theme-assets/*`。
+- 活动主题资源：`/t/*`。

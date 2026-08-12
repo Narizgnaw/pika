@@ -42,4 +42,5 @@ agent.yaml
 playground
 web/node_modules
 web/dist
+themes/default
 deploy.sh

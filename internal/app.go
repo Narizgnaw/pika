@@ -4,9 +4,11 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pika-monitor/pika/internal/assets"
 	"github.com/pika-monitor/pika/internal/config"
 	"github.com/pika-monitor/pika/internal/handler"
 	"github.com/pika-monitor/pika/internal/migrate"
@@ -275,9 +277,9 @@ func setupApi(app *orz.App, components *AppComponents) error {
 	// GitHub 认证路由（如果启用）
 	publicApi.POST("/auth/github/callback", components.AccountHandler.GitHubLogin)
 
-	// 官方管理 SPA 与活动公开主题使用互不重叠的资源前缀。
-	e.GET("/admin/assets/*", components.WebHandler.ServeAdminAsset)
-	e.GET("/theme-assets/*", components.WebHandler.ServeThemeAsset)
+	// 管理前端从 web/dist 由 Echo 直接加载；活动公开主题由主题服务选择独立目录。
+	e.Static("/admin/assets/", filepath.Join(assets.WebDir(), "assets"), handler.ImmutableStaticHeaders)
+	e.GET("/t/*", components.WebHandler.ServeThemeAsset)
 	e.GET("/*", components.WebHandler.ServeSPA)
 
 	return nil

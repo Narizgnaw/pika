@@ -168,6 +168,7 @@ func TestThemeInstallActivateDeleteLifecycle(t *testing.T) {
 	webRoot := t.TempDir()
 	writeOfficialWebBuild(t, webRoot)
 	t.Setenv("PIKA_WEB_DIR", webRoot)
+	t.Setenv("PIKA_DEFAULT_THEME_DIR", filepath.Join(webRoot, "default-theme"))
 	themeDir := filepath.Join(t.TempDir(), "themes")
 
 	database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -267,13 +268,10 @@ func makeInstallableThemeZIP(t *testing.T, manifest ThemeManifest) []byte {
 
 func writeOfficialWebBuild(t *testing.T, webRoot string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(webRoot, "admin", "assets"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(webRoot, "assets"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(webRoot, "admin"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(webRoot, "admin", "index.html"), []byte("<html>admin</html>"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(webRoot, "index.html"), []byte("<html>admin</html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	writeThemeRoot(t, filepath.Join(webRoot, "default-theme"), validTestManifest(DefaultThemeID))
