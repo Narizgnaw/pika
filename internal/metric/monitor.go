@@ -29,6 +29,13 @@ type MonitorStatsResult struct {
 	LastCheckTime int64 `json:"lastCheckTime"` // 最后检测时间(毫秒时间戳)
 }
 
+// MonitorSparklinePoint 是公开服务列表使用的单分钟响应时间摘要。
+type MonitorSparklinePoint struct {
+	Timestamp int64   `json:"timestamp"`
+	Avg       float64 `json:"avg"`
+	Max       float64 `json:"max"`
+}
+
 // PublicMonitorOverview 用于公开展示的监控配置及汇总数据
 type PublicMonitorOverview struct {
 	ID               string `json:"id"`
@@ -51,7 +58,8 @@ type PublicMonitorOverview struct {
 		Down    int `json:"down"`    // 异常探针数量
 		Unknown int `json:"unknown"` // 未知状态探针数量
 	} `json:"agentStats"` // 探针状态分布
-	LastCheckTime int64 `json:"lastCheckTime"` // 最后检测时间
+	LastCheckTime int64                   `json:"lastCheckTime"` // 最后检测时间
+	Sparkline     []MonitorSparklinePoint `json:"sparkline,omitempty"`
 }
 
 // MonitorDetailResponse 监控详情响应（整合版）

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-orz/orz"
 	"github.com/google/uuid"
@@ -226,6 +227,21 @@ func (s *MonitorService) ListByAuth(ctx context.Context, isAuthenticated bool) (
 		// 构建监控概览对象
 		item := s.buildMonitorOverview(monitor, stats)
 		items = append(items, item)
+	}
+
+	monitorIDs := make([]string, 0, len(items))
+	for _, item := range items {
+		monitorIDs = append(monitorIDs, item.ID)
+	}
+	end := time.Now().UnixMilli()
+	sparklines, err := s.metricService.GetMonitorSparklines(ctx, monitorIDs, end-time.Hour.Milliseconds(), end)
+	if err != nil {
+		// 趋势图是列表的增强信息，VictoriaMetrics 暂时不可用时仍返回当前状态。
+		s.logger.Warn("查询公开监控列表趋势失败", zap.Error(err))
+	} else {
+		for i := range items {
+			items[i].Sparkline = sparklines[items[i].ID]
+		}
 	}
 
 	return items, nil

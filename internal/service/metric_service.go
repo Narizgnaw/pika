@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math"
+	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-orz/toolkit/syncx"
@@ -821,6 +824,106 @@ func (s *MetricService) buildMonitorPromQLQueries(monitorID string, aggregation 
 		{Name: "response_time", Query: fmt.Sprintf(`pika_monitor_response_time_ms{monitor_id="%s"}`, monitorID)},
 	}
 	return expandAggregationQueries(queries, aggregation, step)
+}
+
+type monitorSparklineAccumulator struct {
+	sum   float64
+	count int
+	max   float64
+}
+
+// aggregateMonitorSparklines 将按探针返回的响应时间序列聚合为每个监控项的平均值和最大值。
+func aggregateMonitorSparklines(result *vmclient.QueryResult, allowedMonitorIDs map[string]struct{}) map[string][]metric.MonitorSparklinePoint {
+	if result == nil || len(result.Data.Result) == 0 {
+		return map[string][]metric.MonitorSparklinePoint{}
+	}
+
+	accumulators := make(map[string]map[int64]*monitorSparklineAccumulator)
+	for _, series := range result.Data.Result {
+		monitorID := series.Metric["monitor_id"]
+		if _, allowed := allowedMonitorIDs[monitorID]; !allowed {
+			continue
+		}
+
+		if accumulators[monitorID] == nil {
+			accumulators[monitorID] = make(map[int64]*monitorSparklineAccumulator)
+		}
+		for _, valueArray := range series.Values {
+			if len(valueArray) != 2 {
+				continue
+			}
+			timestamp, timestampOK := valueArray[0].(float64)
+			valueString, valueOK := valueArray[1].(string)
+			if !timestampOK || !valueOK {
+				continue
+			}
+			value, err := strconv.ParseFloat(valueString, 64)
+			if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+				continue
+			}
+
+			timestampMillis := int64(timestamp * 1000)
+			accumulator := accumulators[monitorID][timestampMillis]
+			if accumulator == nil {
+				accumulator = &monitorSparklineAccumulator{max: value}
+				accumulators[monitorID][timestampMillis] = accumulator
+			}
+			accumulator.sum += value
+			accumulator.count++
+			if value > accumulator.max {
+				accumulator.max = value
+			}
+		}
+	}
+
+	resultByMonitor := make(map[string][]metric.MonitorSparklinePoint, len(accumulators))
+	for monitorID, byTimestamp := range accumulators {
+		points := make([]metric.MonitorSparklinePoint, 0, len(byTimestamp))
+		for timestamp, accumulator := range byTimestamp {
+			if accumulator.count == 0 {
+				continue
+			}
+			points = append(points, metric.MonitorSparklinePoint{
+				Timestamp: timestamp,
+				Avg:       accumulator.sum / float64(accumulator.count),
+				Max:       accumulator.max,
+			})
+		}
+		sort.Slice(points, func(i, j int) bool {
+			return points[i].Timestamp < points[j].Timestamp
+		})
+		resultByMonitor[monitorID] = points
+	}
+
+	return resultByMonitor
+}
+
+// GetMonitorSparklines 使用一次 VictoriaMetrics 查询返回多个监控项的列表走势图。
+func (s *MetricService) GetMonitorSparklines(ctx context.Context, monitorIDs []string, start, end int64) (map[string][]metric.MonitorSparklinePoint, error) {
+	if len(monitorIDs) == 0 {
+		return map[string][]metric.MonitorSparklinePoint{}, nil
+	}
+
+	allowedMonitorIDs := make(map[string]struct{}, len(monitorIDs))
+	escapedMonitorIDs := make([]string, 0, len(monitorIDs))
+	for _, monitorID := range monitorIDs {
+		if monitorID == "" {
+			continue
+		}
+		allowedMonitorIDs[monitorID] = struct{}{}
+		escapedMonitorIDs = append(escapedMonitorIDs, regexp.QuoteMeta(monitorID))
+	}
+	if len(escapedMonitorIDs) == 0 {
+		return map[string][]metric.MonitorSparklinePoint{}, nil
+	}
+
+	query := fmt.Sprintf(`pika_monitor_response_time_ms{monitor_id=~"^(?:%s)$"}`, strings.Join(escapedMonitorIDs, "|"))
+	queryResult, err := s.vmClient.QueryRange(ctx, query, time.UnixMilli(start), time.UnixMilli(end), time.Minute)
+	if err != nil {
+		return nil, err
+	}
+
+	return aggregateMonitorSparklines(queryResult, allowedMonitorIDs), nil
 }
 
 // GetMonitorHistory 获取监控任务的历史趋势数据
