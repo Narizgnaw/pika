@@ -14,9 +14,11 @@ import (
 )
 
 const (
-	agentExpireAlertType         = "agent_expire"
-	agentExpireReminderThreshold = 7
+	agentExpireAlertType = "agent_expire"
 )
+
+// 机器到期提醒采用固定里程碑，避免规则配置过于复杂；每个里程碑只提醒一次。
+var agentExpireReminderDays = [...]int{7, 3, 1}
 
 // AlertService 告警服务
 type AlertService struct {
@@ -424,26 +426,39 @@ func (s *AlertService) checkAgentExpireAlert(ctx context.Context, config *Effect
 	}
 
 	daysLeft := agentExpireDaysLeft(agent.ExpireTime, now)
+	previousReminderDay := int(state.Threshold)
 	state.AgentID = agent.ID
 	state.AlertType = agentExpireAlertType
 	state.ConfigID = config.ConfigID
-	state.Threshold = float64(agentExpireReminderThreshold)
 	state.Duration = 0
 	state.Value = daysLeft
 	state.LastCheckTime = now
 
-	dayMs := int64(24 * time.Hour / time.Millisecond)
-	var shouldFire, shouldResolve bool
-	if agent.ExpireTime > 0 && agent.ExpireTime-now <= int64(agentExpireReminderThreshold)*dayMs {
-		if !state.IsFiring {
-			shouldFire = true
-			state.IsFiring = true
+	reminderDay, inReminderWindow := agentExpireReminderDay(agent.ExpireTime, now)
+	expireNotificationEnabled := isNotificationEnabled(config.Notifications, NotificationTypeAgentExpire)
+	if !expireNotificationEnabled || !inReminderWindow {
+		shouldResolve := state.IsFiring
+		state.Threshold = 0
+
+		if err := s.AlertStateRepo.SaveAlertState(ctx, state); err != nil {
+			return fmt.Errorf("保存告警状态失败: %w", err)
 		}
-	} else {
-		if state.IsFiring {
-			shouldResolve = true
+
+		if shouldResolve {
+			// 关闭通知开关时只清理状态，不额外发送恢复通知；续期或清空到期时间时发送恢复通知。
+			s.resolveAgentExpireAlert(ctx, config, agent, state, expireNotificationEnabled)
 		}
+		return nil
 	}
+
+	// 首次进入提醒窗口，或从 7 天进入 3 天、再进入 1 天时，各创建一次提醒。
+	// 若管理员把到期时间改到另一个提醒窗口，也用新的里程碑替换旧提醒。
+	shouldFire := !state.IsFiring || previousReminderDay != reminderDay
+	if state.IsFiring && previousReminderDay != reminderDay {
+		s.resolveAgentExpireAlert(ctx, config, agent, state, false)
+	}
+	state.Threshold = float64(reminderDay)
+	state.IsFiring = true
 
 	if err := s.AlertStateRepo.SaveAlertState(ctx, state); err != nil {
 		return fmt.Errorf("保存告警状态失败: %w", err)
@@ -451,9 +466,6 @@ func (s *AlertService) checkAgentExpireAlert(ctx context.Context, config *Effect
 
 	if shouldFire {
 		s.fireAgentExpireAlert(ctx, config, agent, state, now)
-	}
-	if shouldResolve {
-		s.resolveAgentExpireAlert(ctx, config, agent, state)
 	}
 
 	return nil
@@ -474,7 +486,7 @@ func (s *AlertService) fireAgentExpireAlert(ctx context.Context, config *Effecti
 		ConfigID:    config.ConfigID,
 		ConfigName:  config.Name,
 		Message:     s.buildAgentExpireMessage(agent, now),
-		Threshold:   float64(agentExpireReminderThreshold),
+		Threshold:   state.Threshold,
 		ActualValue: state.Value,
 		Level:       s.calculateAgentExpireLevel(state.Value),
 		Status:      "firing",
@@ -496,7 +508,7 @@ func (s *AlertService) fireAgentExpireAlert(ctx context.Context, config *Effecti
 	go s.sendAlertNotification(record, agent)
 }
 
-func (s *AlertService) resolveAgentExpireAlert(ctx context.Context, config *EffectiveAlertConfig, agent *models.Agent, state *models.AlertState) {
+func (s *AlertService) resolveAgentExpireAlert(ctx context.Context, config *EffectiveAlertConfig, agent *models.Agent, state *models.AlertState, notify bool) {
 	s.logger.Info("机器过期提醒恢复",
 		zap.String("agentId", agent.ID),
 		zap.String("agentName", agent.Name),
@@ -517,7 +529,7 @@ func (s *AlertService) resolveAgentExpireAlert(ctx context.Context, config *Effe
 
 			if err := s.AlertRecordRepo.UpdateAlertRecord(ctx, existingRecord); err != nil {
 				s.logger.Error("更新机器过期提醒记录失败", zap.Error(err))
-			} else {
+			} else if notify {
 				go s.sendAlertNotification(existingRecord, agent)
 			}
 		}
@@ -572,6 +584,24 @@ func agentExpireDaysLeft(expireTime int64, now int64) float64 {
 		return 0
 	}
 	return float64(expireTime-now) / float64(24*time.Hour/time.Millisecond)
+}
+
+// agentExpireReminderDay 返回当前应命中的提醒里程碑。若首次配置时已不足 3 天或 1 天，
+// 只命中最近的一个里程碑，避免在同一次检查中连续发送多条历史提醒。
+func agentExpireReminderDay(expireTime int64, now int64) (int, bool) {
+	if expireTime <= 0 {
+		return 0, false
+	}
+
+	remaining := expireTime - now
+	dayMs := int64(24 * time.Hour / time.Millisecond)
+	for i := len(agentExpireReminderDays) - 1; i >= 0; i-- {
+		reminderDay := agentExpireReminderDays[i]
+		if remaining <= int64(reminderDay)*dayMs {
+			return reminderDay, true
+		}
+	}
+	return 0, false
 }
 
 // CheckMonitorAlerts 检查监控相关告警（证书、服务下线、探针离线，按各主机生效的规则检查）

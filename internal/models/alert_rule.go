@@ -24,7 +24,7 @@ type AlertRule struct {
 	Rules         datatypes.JSONType[AlertRules]         `json:"rules"`                                 // 告警规则（7 类阈值规则）
 	Channels      datatypes.JSONSlice[string]            `json:"channels"`                              // 通知渠道类型列表（空 = 所有启用渠道）
 	MaskIP        bool                                   `json:"maskIP"`                                // 通知中是否打码 IP 地址
-	Notifications datatypes.JSONType[AlertNotifications] `json:"notifications"`                         // 事件通知开关（流量/SSH登录/防篡改）
+	Notifications datatypes.JSONType[AlertNotifications] `json:"notifications"`                         // 事件通知开关（流量/SSH登录/防篡改/机器到期）
 	CreatedAt     int64                                  `gorm:"autoCreateTime:milli" json:"createdAt"` // 创建时间
 	UpdatedAt     int64                                  `gorm:"autoUpdateTime:milli" json:"updatedAt"` // 更新时间
 }

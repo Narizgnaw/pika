@@ -167,6 +167,7 @@ type AlertNotifications struct {
 	TrafficEnabled         bool `json:"trafficEnabled"`         // 流量告警通知
 	SSHLoginSuccessEnabled bool `json:"sshLoginSuccessEnabled"` // SSH 登录成功通知
 	TamperEventEnabled     bool `json:"tamperEventEnabled"`     // 防篡改事件通知
+	AgentExpireEnabled     bool `json:"agentExpireEnabled"`     // 机器到期提醒通知
 }
 
 // AgentInstallConfig 探针安装配置

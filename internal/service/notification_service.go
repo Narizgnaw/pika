@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	NotificationTypeTraffic   = "traffic"
-	NotificationTypeSSHLogin  = "ssh_login"
-	NotificationTypeTamperEvt = "tamper"
+	NotificationTypeTraffic     = "traffic"
+	NotificationTypeSSHLogin    = "ssh_login"
+	NotificationTypeTamperEvt   = "tamper"
+	NotificationTypeAgentExpire = "agent_expire"
 )
 
 // NotificationService 统一通知发送入口（事件类通知，按各主机命中的告警规则驱动）
@@ -117,6 +118,8 @@ func isNotificationEnabled(notifications models.AlertNotifications, notification
 		return notifications.SSHLoginSuccessEnabled
 	case NotificationTypeTamperEvt:
 		return notifications.TamperEventEnabled
+	case NotificationTypeAgentExpire:
+		return notifications.AgentExpireEnabled
 	default:
 		return true
 	}

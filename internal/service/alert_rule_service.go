@@ -24,7 +24,7 @@ type EffectiveAlertConfig struct {
 	ConfigID      string                    // 告警规则 ID
 	Name          string                    // 规则名称
 	MaskIP        bool                      // 通知中是否打码 IP
-	Notifications models.AlertNotifications // 事件通知开关（流量/SSH登录/防篡改）
+	Notifications models.AlertNotifications // 事件通知开关（流量/SSH登录/防篡改/机器到期）
 	Rules         models.AlertRules         // 告警规则
 	Channels      []string                  // 通知渠道类型列表（空 = 所有启用渠道）
 }

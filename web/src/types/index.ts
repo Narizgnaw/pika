@@ -506,6 +506,7 @@ export interface AlertNotifications {
     trafficEnabled: boolean;         // 流量告警通知
     sshLoginSuccessEnabled: boolean; // SSH 登录成功通知
     tamperEventEnabled: boolean;     // 防篡改事件通知
+    agentExpireEnabled: boolean;     // 机器到期提醒通知
 }
 
 // 告警规则（针对一批主机的一套告警规则与通知渠道）
@@ -521,7 +522,7 @@ export interface AlertRule {
     rules: AlertRules;
     channels: string[];      // 通知渠道类型列表（空 = 所有启用渠道）
     maskIP: boolean;         // 通知中是否打码 IP 地址
-    notifications: AlertNotifications; // 事件通知开关（流量/SSH登录/防篡改）
+    notifications: AlertNotifications; // 事件通知开关（流量/SSH登录/防篡改/机器到期）
     createdAt: number;
     updatedAt: number;
 }

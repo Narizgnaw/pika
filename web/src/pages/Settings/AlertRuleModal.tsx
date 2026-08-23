@@ -12,6 +12,7 @@ const DEFAULT_ALERT_NOTIFICATIONS = {
     trafficEnabled: false,
     sshLoginSuccessEnabled: false,
     tamperEventEnabled: false,
+    agentExpireEnabled: false,
 };
 
 interface AlertRuleModalProps {
@@ -84,7 +85,7 @@ const AlertRuleModal = ({open, rule, onCancel, onSuccess}: AlertRuleModalProps) 
                 tags: rule.tags || [],
                 channels: rule.channels || [],
                 maskIP: rule.maskIP ?? false,
-                notifications: rule.notifications || DEFAULT_ALERT_NOTIFICATIONS,
+                notifications: {...DEFAULT_ALERT_NOTIFICATIONS, ...rule.notifications},
                 rules: rule.rules,
             });
         } else {
@@ -260,7 +261,7 @@ const AlertRuleModal = ({open, rule, onCancel, onSuccess}: AlertRuleModalProps) 
                 <div className="mb-2 text-[13px] font-semibold text-[#1f2329] dark:text-[#e6e8ec]">
                     事件通知
                 </div>
-                <div className="grid gap-x-4 sm:grid-cols-3">
+                <div className="grid gap-x-4 sm:grid-cols-2 lg:grid-cols-4">
                     <Form.Item
                         label="流量告警通知"
                         name={['notifications', 'trafficEnabled']}
@@ -279,6 +280,14 @@ const AlertRuleModal = ({open, rule, onCancel, onSuccess}: AlertRuleModalProps) 
                         label="防篡改事件通知"
                         name={['notifications', 'tamperEventEnabled']}
                         valuePropName="checked"
+                    >
+                        <Switch checkedChildren="开启" unCheckedChildren="关闭"/>
+                    </Form.Item>
+                    <Form.Item
+                        label="机器到期提醒"
+                        name={['notifications', 'agentExpireEnabled']}
+                        valuePropName="checked"
+                        tooltip="配置到期时间后，提前 7、3、1 天各提醒一次"
                     >
                         <Switch checkedChildren="开启" unCheckedChildren="关闭"/>
                     </Form.Item>
