@@ -188,12 +188,12 @@ type OIDCAuthURL struct {
 }
 
 // GetOIDCAuthURL 获取 OIDC 认证 URL
-func (s *AccountService) GetOIDCAuthURL() (*OIDCAuthURL, error) {
+func (s *AccountService) GetOIDCAuthURL(ctx context.Context) (*OIDCAuthURL, error) {
 	if !s.oidcService.IsEnabled() {
 		return nil, errors.New("OIDC 未启用")
 	}
 
-	authURL, state, err := s.oidcService.GenerateAuthURL()
+	authURL, state, err := s.oidcService.GenerateAuthURL(ctx)
 	if err != nil {
 		return nil, err
 	}

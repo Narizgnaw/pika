@@ -1,5 +1,10 @@
 package config
 
+import (
+	"fmt"
+	"strings"
+)
+
 // AppConfig 应用配置
 type AppConfig struct {
 	JWT             JWTConfig          `json:"JWT"`
@@ -29,6 +34,33 @@ type OIDCConfig struct {
 	ClientID     string `json:"ClientID"`     // Client ID
 	ClientSecret string `json:"ClientSecret"` // Client Secret
 	RedirectURL  string `json:"RedirectURL"`  // 回调URL
+}
+
+// Validate 校验启用 OIDC 所需的静态配置。
+// Provider 是否可访问属于运行时状态，不应在应用启动阶段参与配置有效性判断。
+func (c *OIDCConfig) Validate() error {
+	if c == nil || !c.Enabled {
+		return nil
+	}
+
+	missing := make([]string, 0, 4)
+	if strings.TrimSpace(c.Issuer) == "" {
+		missing = append(missing, "Issuer")
+	}
+	if strings.TrimSpace(c.ClientID) == "" {
+		missing = append(missing, "ClientID")
+	}
+	if strings.TrimSpace(c.ClientSecret) == "" {
+		missing = append(missing, "ClientSecret")
+	}
+	if strings.TrimSpace(c.RedirectURL) == "" {
+		missing = append(missing, "RedirectURL")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("缺少必要配置: %s", strings.Join(missing, ", "))
+	}
+
+	return nil
 }
 
 // GitHubOAuthConfig GitHub OAuth认证配置

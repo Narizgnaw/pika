@@ -76,7 +76,7 @@ func (r AccountHandler) GetAuthConfig(c *echo.Context) error {
 
 // GetOIDCAuthURL 获取 OIDC 认证 URL
 func (r AccountHandler) GetOIDCAuthURL(c *echo.Context) error {
-	authURL, err := r.accountService.GetOIDCAuthURL()
+	authURL, err := r.accountService.GetOIDCAuthURL(c.Request().Context())
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
