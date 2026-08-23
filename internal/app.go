@@ -162,6 +162,7 @@ func setupApi(app *orz.App, components *AppComponents) error {
 
 		// 监控统计数据（公开访问，支持可选认证）- 用于公共展示页面
 		publicApiWithOptionalAuth.GET("/monitors", components.MonitorHandler.GetMonitors)
+		publicApiWithOptionalAuth.GET("/monitors/sparklines", components.MonitorHandler.GetSparklines)
 		publicApiWithOptionalAuth.GET("/monitors/:id/stats", components.MonitorHandler.GetStatsByID)
 		publicApiWithOptionalAuth.GET("/monitors/:id/agents", components.MonitorHandler.GetAgentStatsByID)
 		publicApiWithOptionalAuth.GET("/monitors/:id/history", components.MonitorHandler.GetHistoryByID)

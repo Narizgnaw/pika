@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-orz/toolkit/syncx"
@@ -35,19 +36,25 @@ type MetricService struct {
 	latestCache cache.Cache[string, *metric.LatestMetrics] // Agent 最新指标缓存
 
 	monitorLatestCache cache.Cache[string, *metric.LatestMonitorMetrics] // 监控最新指标缓存
+
+	monitorSparklineMu       sync.Mutex
+	monitorSparklineCache    map[string]monitorSparklineCacheEntry
+	monitorSparklineInflight map[string]*monitorSparklineCall
 }
 
 // NewMetricService 创建指标服务
 func NewMetricService(logger *zap.Logger, db *gorm.DB, propertyService *PropertyService, trafficService *TrafficService, vmClient *vmclient.VMClient) *MetricService {
 	return &MetricService{
-		logger:             logger,
-		agentRepo:          repo.NewAgentRepo(db),
-		monitorRepo:        repo.NewMonitorRepo(db),
-		propertyService:    propertyService,
-		trafficService:     trafficService,
-		vmClient:           vmClient,
-		latestCache:        cache.New[string, *metric.LatestMetrics](time.Minute),
-		monitorLatestCache: cache.New[string, *metric.LatestMonitorMetrics](5 * time.Minute), // 监控数据缓存 5 分钟
+		logger:                   logger,
+		agentRepo:                repo.NewAgentRepo(db),
+		monitorRepo:              repo.NewMonitorRepo(db),
+		propertyService:          propertyService,
+		trafficService:           trafficService,
+		vmClient:                 vmClient,
+		latestCache:              cache.New[string, *metric.LatestMetrics](time.Minute),
+		monitorLatestCache:       cache.New[string, *metric.LatestMonitorMetrics](5 * time.Minute), // 监控数据缓存 5 分钟
+		monitorSparklineCache:    make(map[string]monitorSparklineCacheEntry),
+		monitorSparklineInflight: make(map[string]*monitorSparklineCall),
 	}
 }
 
@@ -896,6 +903,111 @@ func aggregateMonitorSparklines(result *vmclient.QueryResult, allowedMonitorIDs 
 	}
 
 	return resultByMonitor
+}
+
+type monitorSparklineCacheEntry struct {
+	generatedAt int64
+	expiresAt   time.Time
+	items       map[string][]metric.MonitorSparklinePoint
+}
+
+type monitorSparklineCall struct {
+	done        chan struct{}
+	generatedAt int64
+	items       map[string][]metric.MonitorSparklinePoint
+	err         error
+}
+
+func normalizeMonitorSparklineIDs(monitorIDs []string) []string {
+	unique := make(map[string]struct{}, len(monitorIDs))
+	for _, monitorID := range monitorIDs {
+		if monitorID != "" {
+			unique[monitorID] = struct{}{}
+		}
+	}
+
+	normalized := make([]string, 0, len(unique))
+	for monitorID := range unique {
+		normalized = append(normalized, monitorID)
+	}
+	sort.Strings(normalized)
+	return normalized
+}
+
+func cloneMonitorSparklines(items map[string][]metric.MonitorSparklinePoint) map[string][]metric.MonitorSparklinePoint {
+	cloned := make(map[string][]metric.MonitorSparklinePoint, len(items))
+	for monitorID, points := range items {
+		cloned[monitorID] = append([]metric.MonitorSparklinePoint(nil), points...)
+	}
+	return cloned
+}
+
+// GetCachedMonitorSparklines 返回带短期缓存的批量走势图，并合并同一查询的并发请求。
+func (s *MetricService) GetCachedMonitorSparklines(ctx context.Context, monitorIDs []string, window, ttl time.Duration) (int64, map[string][]metric.MonitorSparklinePoint, error) {
+	normalizedIDs := normalizeMonitorSparklineIDs(monitorIDs)
+	if len(normalizedIDs) == 0 {
+		return time.Now().UnixMilli(), map[string][]metric.MonitorSparklinePoint{}, nil
+	}
+
+	key := strconv.FormatInt(window.Milliseconds(), 10) + ":" + strings.Join(normalizedIDs, "\x00")
+	now := time.Now()
+
+	s.monitorSparklineMu.Lock()
+	if s.monitorSparklineCache == nil {
+		s.monitorSparklineCache = make(map[string]monitorSparklineCacheEntry)
+	}
+	if s.monitorSparklineInflight == nil {
+		s.monitorSparklineInflight = make(map[string]*monitorSparklineCall)
+	}
+	if cached, ok := s.monitorSparklineCache[key]; ok {
+		if now.Before(cached.expiresAt) {
+			s.monitorSparklineMu.Unlock()
+			return cached.generatedAt, cloneMonitorSparklines(cached.items), nil
+		}
+		delete(s.monitorSparklineCache, key)
+	}
+	if call, ok := s.monitorSparklineInflight[key]; ok {
+		s.monitorSparklineMu.Unlock()
+		select {
+		case <-call.done:
+			return call.generatedAt, cloneMonitorSparklines(call.items), call.err
+		case <-ctx.Done():
+			return 0, nil, ctx.Err()
+		}
+	}
+
+	call := &monitorSparklineCall{done: make(chan struct{})}
+	s.monitorSparklineInflight[key] = call
+	s.monitorSparklineMu.Unlock()
+
+	end := time.Now().UnixMilli()
+	items, err := s.GetMonitorSparklines(ctx, normalizedIDs, end-window.Milliseconds(), end)
+	if err == nil && items == nil {
+		items = map[string][]metric.MonitorSparklinePoint{}
+	}
+
+	s.monitorSparklineMu.Lock()
+	call.generatedAt = end
+	call.items = items
+	call.err = err
+	if err == nil && ttl > 0 {
+		cacheNow := time.Now()
+		for cacheKey, cached := range s.monitorSparklineCache {
+			if !cacheNow.Before(cached.expiresAt) {
+				delete(s.monitorSparklineCache, cacheKey)
+			}
+		}
+		s.monitorSparklineCache[key] = monitorSparklineCacheEntry{
+			generatedAt: end,
+			expiresAt:   cacheNow.Add(ttl),
+			items:       cloneMonitorSparklines(items),
+		}
+	}
+	delete(s.monitorSparklineInflight, key)
+	close(call.done)
+	s.monitorSparklineMu.Unlock()
+
+	return end, cloneMonitorSparklines(items), err
 }
 
 // GetMonitorSparklines 使用一次 VictoriaMetrics 查询返回多个监控项的列表走势图。

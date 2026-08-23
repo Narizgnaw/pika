@@ -36,6 +36,12 @@ type MonitorSparklinePoint struct {
 	Max       float64 `json:"max"`
 }
 
+// PublicMonitorSparklinesResponse 是公开服务列表的独立趋势响应。
+type PublicMonitorSparklinesResponse struct {
+	GeneratedAt int64                              `json:"generatedAt"`
+	Items       map[string][]MonitorSparklinePoint `json:"items"`
+}
+
 // PublicMonitorOverview 用于公开展示的监控配置及汇总数据
 type PublicMonitorOverview struct {
 	ID               string `json:"id"`
@@ -58,8 +64,7 @@ type PublicMonitorOverview struct {
 		Down    int `json:"down"`    // 异常探针数量
 		Unknown int `json:"unknown"` // 未知状态探针数量
 	} `json:"agentStats"` // 探针状态分布
-	LastCheckTime int64                   `json:"lastCheckTime"` // 最后检测时间
-	Sparkline     []MonitorSparklinePoint `json:"sparkline,omitempty"`
+	LastCheckTime int64 `json:"lastCheckTime"` // 最后检测时间
 }
 
 // MonitorDetailResponse 监控详情响应（整合版）

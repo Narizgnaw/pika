@@ -229,22 +229,29 @@ func (s *MonitorService) ListByAuth(ctx context.Context, isAuthenticated bool) (
 		items = append(items, item)
 	}
 
-	monitorIDs := make([]string, 0, len(items))
-	for _, item := range items {
-		monitorIDs = append(monitorIDs, item.ID)
-	}
-	end := time.Now().UnixMilli()
-	sparklines, err := s.metricService.GetMonitorSparklines(ctx, monitorIDs, end-time.Hour.Milliseconds(), end)
+	return items, nil
+}
+
+// GetMonitorSparklinesByAuth 返回当前访问者可见监控项的批量走势图。
+func (s *MonitorService) GetMonitorSparklinesByAuth(ctx context.Context, isAuthenticated bool) (*metric.PublicMonitorSparklinesResponse, error) {
+	monitors, err := s.FindByAuth(ctx, isAuthenticated)
 	if err != nil {
-		// 趋势图是列表的增强信息，VictoriaMetrics 暂时不可用时仍返回当前状态。
-		s.logger.Warn("查询公开监控列表趋势失败", zap.Error(err))
-	} else {
-		for i := range items {
-			items[i].Sparkline = sparklines[items[i].ID]
-		}
+		return nil, err
 	}
 
-	return items, nil
+	monitorIDs := make([]string, 0, len(monitors))
+	for _, monitor := range monitors {
+		monitorIDs = append(monitorIDs, monitor.ID)
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	generatedAt, items, err := s.metricService.GetCachedMonitorSparklines(queryCtx, monitorIDs, time.Hour, 20*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	return &metric.PublicMonitorSparklinesResponse{GeneratedAt: generatedAt, Items: items}, nil
 }
 
 // buildMonitorOverview 构建监控概览对象

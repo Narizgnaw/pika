@@ -150,6 +150,17 @@ func (h *MonitorHandler) GetMonitors(c *echo.Context) error {
 	return orz.Ok(c, stats)
 }
 
+// GetSparklines 获取公开服务列表使用的最近一小时响应时间趋势。
+func (h *MonitorHandler) GetSparklines(c *echo.Context) error {
+	ctx := c.Request().Context()
+	result, err := h.monitorService.GetMonitorSparklinesByAuth(ctx, utils.IsAuthenticated(c))
+	if err != nil {
+		return err
+	}
+
+	return orz.Ok(c, result)
+}
+
 // GetStatsByID 获取指定监控任务的统计数据（公开接口，已登录返回全部，未登录返回公开可见）
 func (h *MonitorHandler) GetStatsByID(c *echo.Context) error {
 	id := c.Param("id")
