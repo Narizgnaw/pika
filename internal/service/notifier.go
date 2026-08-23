@@ -10,7 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +24,7 @@ import (
 	"github.com/pika-monitor/pika/internal/utils"
 	"github.com/valyala/fasttemplate"
 	"go.uber.org/zap"
+	"golang.org/x/net/proxy"
 	"gopkg.in/gomail.v2"
 )
 
@@ -540,8 +543,62 @@ func (n *Notifier) sendFeishu(ctx context.Context, webhook, signSecret, message 
 	return nil
 }
 
+func buildTelegramWebhookURL(botToken, apiBaseURL string) (string, error) {
+	if apiBaseURL == "" {
+		apiBaseURL = "https://api.telegram.org"
+	}
+
+	parsedURL, err := url.Parse(apiBaseURL)
+	if err != nil || parsedURL.Host == "" || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		return "", fmt.Errorf("Telegram 自定义反代地址必须是有效的 HTTP/HTTPS 地址")
+	}
+	if parsedURL.RawQuery != "" || parsedURL.Fragment != "" {
+		return "", fmt.Errorf("Telegram 自定义反代地址不能包含查询参数或片段")
+	}
+
+	parsedURL.Path = strings.TrimRight(parsedURL.Path, "/") + "/bot" + botToken + "/sendMessage"
+	return parsedURL.String(), nil
+}
+
+func newTelegramHTTPClient(proxyURL string) (*http.Client, error) {
+	if proxyURL == "" {
+		return sharedHTTPClient, nil
+	}
+
+	parsedURL, err := url.Parse(proxyURL)
+	if err != nil || parsedURL.Host == "" {
+		return nil, fmt.Errorf("Telegram 代理地址无效")
+	}
+
+	transport := &http.Transport{
+		MaxIdleConns:        10,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+	}
+
+	switch parsedURL.Scheme {
+	case "http":
+		transport.Proxy = http.ProxyURL(parsedURL)
+	case "socks5":
+		dialer, err := proxy.FromURL(parsedURL, proxy.Direct)
+		if err != nil {
+			return nil, fmt.Errorf("创建 Telegram SOCKS5 代理失败: %w", err)
+		}
+		transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+			if contextDialer, ok := dialer.(proxy.ContextDialer); ok {
+				return contextDialer.DialContext(ctx, network, address)
+			}
+			return dialer.Dial(network, address)
+		}
+	default:
+		return nil, fmt.Errorf("Telegram 代理仅支持 http:// 或 socks5://")
+	}
+
+	return &http.Client{Timeout: 10 * time.Second, Transport: transport}, nil
+}
+
 // sendTelegram 发送 Telegram 通知
-func (n *Notifier) sendTelegram(ctx context.Context, botToken, chatID, message string) error {
+func (n *Notifier) sendTelegram(ctx context.Context, botToken, chatID, message, proxyURL, apiBaseURL string) error {
 	if utf8.RuneCountInString(message) > 4096 {
 		n.logger.Warn("Telegram消息过长，进行截断",
 			zap.Int("originalLen", utf8.RuneCountInString(message)),
@@ -551,14 +608,22 @@ func (n *Notifier) sendTelegram(ctx context.Context, botToken, chatID, message s
 		message = string(runes[:4093]) + "..."
 	}
 
-	webhookURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", botToken)
+	webhookURL, err := buildTelegramWebhookURL(botToken, apiBaseURL)
+	if err != nil {
+		return err
+	}
+
+	httpClient, err := newTelegramHTTPClient(proxyURL)
+	if err != nil {
+		return err
+	}
 
 	body := map[string]interface{}{
 		"chat_id": chatID,
 		"text":    message,
 	}
 
-	_, err := n.sendJSONRequest(ctx, webhookURL, body)
+	_, err = n.sendJSONRequestWithClient(ctx, httpClient, webhookURL, body)
 	if err != nil {
 		return err
 	}
@@ -719,6 +784,10 @@ func (n *Notifier) buildCustomBody(agent *models.Agent, record *models.AlertReco
 
 // retryDoWithBackoff 带重试和退避的 HTTP 请求执行
 func (n *Notifier) retryDoWithBackoff(ctx context.Context, createReq func() (*http.Request, error)) (*http.Response, error) {
+	return n.retryDoWithClientBackoff(ctx, sharedHTTPClient, createReq)
+}
+
+func (n *Notifier) retryDoWithClientBackoff(ctx context.Context, httpClient *http.Client, createReq func() (*http.Request, error)) (*http.Response, error) {
 	var lastErr error
 	for i := 0; i < maxRetries; i++ {
 		if i > 0 {
@@ -739,7 +808,7 @@ func (n *Notifier) retryDoWithBackoff(ctx context.Context, createReq func() (*ht
 			return nil, fmt.Errorf("创建请求失败: %w", err)
 		}
 
-		resp, err := sharedHTTPClient.Do(req)
+		resp, err := httpClient.Do(req)
 		if err == nil {
 			return resp, nil
 		}
@@ -815,6 +884,10 @@ func (n *Notifier) sendCustomWebhook(ctx context.Context, config map[string]inte
 }
 
 func (n *Notifier) sendJSONRequest(ctx context.Context, url string, body interface{}) ([]byte, error) {
+	return n.sendJSONRequestWithClient(ctx, sharedHTTPClient, url, body)
+}
+
+func (n *Notifier) sendJSONRequestWithClient(ctx context.Context, httpClient *http.Client, url string, body interface{}) ([]byte, error) {
 	data, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("序列化请求体失败: %w", err)
@@ -829,7 +902,7 @@ func (n *Notifier) sendJSONRequest(ctx context.Context, url string, body interfa
 		return req, nil
 	}
 
-	resp, err := n.retryDoWithBackoff(ctx, createReq)
+	resp, err := n.retryDoWithClientBackoff(ctx, httpClient, createReq)
 	if err != nil {
 		return nil, fmt.Errorf("发送请求失败: %w", err)
 	}
@@ -932,7 +1005,10 @@ func (n *Notifier) sendTelegramByConfig(ctx context.Context, config map[string]i
 		return fmt.Errorf("Telegram 配置缺少 chatID")
 	}
 
-	return n.sendTelegram(ctx, botToken, chatID, message)
+	proxyURL, _ := config["proxyURL"].(string)
+	apiBaseURL, _ := config["apiBaseURL"].(string)
+
+	return n.sendTelegram(ctx, botToken, chatID, message, proxyURL, apiBaseURL)
 }
 
 // sendEmailByConfig 根据配置发送邮件通知

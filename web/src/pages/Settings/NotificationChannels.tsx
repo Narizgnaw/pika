@@ -102,6 +102,43 @@ const NotificationChannels = () => {
         return Promise.resolve();
     };
 
+    const validateTelegramProxyURL = (_: any, value?: string) => {
+        if (!value) {
+            return Promise.resolve();
+        }
+
+        try {
+            const proxyURL = new URL(value);
+            if (!['http:', 'socks5:'].includes(proxyURL.protocol) || !proxyURL.hostname) {
+                throw new Error();
+            }
+            return Promise.resolve();
+        } catch {
+            return Promise.reject(new Error('请输入 http:// 或 socks5:// 开头的有效代理地址'));
+        }
+    };
+
+    const validateTelegramAPIBaseURL = (_: any, value?: string) => {
+        if (!value) {
+            return Promise.resolve();
+        }
+
+        try {
+            const apiBaseURL = new URL(value);
+            if (
+                !['http:', 'https:'].includes(apiBaseURL.protocol)
+                || !apiBaseURL.hostname
+                || apiBaseURL.search
+                || apiBaseURL.hash
+            ) {
+                throw new Error();
+            }
+            return Promise.resolve();
+        } catch {
+            return Promise.reject(new Error('请输入 http:// 或 https:// 开头的有效反代地址'));
+        }
+    };
+
     // 监听各个通知渠道的启用状态
     const dingtalkEnabled = Form.useWatch('dingtalkEnabled', form);
     const wecomEnabled = Form.useWatch('wecomEnabled', form);
@@ -179,6 +216,8 @@ const NotificationChannels = () => {
                     formValues.telegramEnabled = channel.enabled;
                     formValues.telegramBotToken = channel.config?.botToken || '';
                     formValues.telegramChatID = channel.config?.chatID || '';
+                    formValues.telegramProxyURL = channel.config?.proxyURL || '';
+                    formValues.telegramAPIBaseURL = channel.config?.apiBaseURL || '';
                 } else if (channel.type === 'email') {
                     formValues.emailEnabled = channel.enabled;
                     formValues.emailSmtpHost = channel.config?.smtpHost || '';
@@ -268,6 +307,8 @@ const NotificationChannels = () => {
                     config: {
                         botToken: values.telegramBotToken || '',
                         chatID: values.telegramChatID || '',
+                        proxyURL: values.telegramProxyURL || '',
+                        apiBaseURL: values.telegramAPIBaseURL || '',
                     },
                 });
             }
@@ -457,26 +498,47 @@ const NotificationChannels = () => {
                 );
             case 'telegram':
                 return (
-                    <div className={fieldGridClass}>
-                        <Form.Item
-                            label="Bot Token"
-                            name="telegramBotToken"
-                            rules={[
-                                {required: true, message: '请输入 Bot Token'},
-                                {validator: validateToken}
-                            ]}
-                            tooltip="通过 @BotFather 创建机器人后获得的 token"
-                        >
-                            <Input.Password placeholder="输入 Bot Token"/>
-                        </Form.Item>
-                        <Form.Item
-                            label="Chat ID"
-                            name="telegramChatID"
-                            rules={[{required: true, message: '请输入 Chat ID'}]}
-                            tooltip="可以是用户 ID、群组 ID 或频道 ID，通过 @userinfobot 等机器人获取"
-                        >
-                            <Input placeholder="输入 Chat ID，例如：123456789"/>
-                        </Form.Item>
+                    <div className="space-y-0">
+                        <div className={fieldGridClass}>
+                            <Form.Item
+                                label="Bot Token"
+                                name="telegramBotToken"
+                                rules={[
+                                    {required: true, message: '请输入 Bot Token'},
+                                    {validator: validateToken}
+                                ]}
+                                tooltip="通过 @BotFather 创建机器人后获得的 token"
+                            >
+                                <Input.Password placeholder="输入 Bot Token"/>
+                            </Form.Item>
+                            <Form.Item
+                                label="Chat ID"
+                                name="telegramChatID"
+                                rules={[{required: true, message: '请输入 Chat ID'}]}
+                                tooltip="可以是用户 ID、群组 ID 或频道 ID，通过 @userinfobot 等机器人获取"
+                            >
+                                <Input placeholder="输入 Chat ID，例如：123456789"/>
+                            </Form.Item>
+                            <Form.Item
+                                label="代理地址（HTTP/SOCKS5，可选）"
+                                name="telegramProxyURL"
+                                rules={[{validator: validateTelegramProxyURL}]}
+                                tooltip="支持 HTTP 和 SOCKS5 代理；如需认证，请将账号密码写在代理 URL 中"
+                            >
+                                <Input.Password
+                                    autoComplete="new-password"
+                                    placeholder="例如：http://user:pass@127.0.0.1:7890"
+                                />
+                            </Form.Item>
+                            <Form.Item
+                                label="自定义反代地址（可选）"
+                                name="telegramAPIBaseURL"
+                                rules={[{validator: validateTelegramAPIBaseURL}]}
+                                tooltip="Telegram Bot API 的反向代理基址；请求路径会自动拼接 /bot{token}/sendMessage"
+                            >
+                                <Input placeholder="例如：https://telegram.example.com"/>
+                            </Form.Item>
+                        </div>
                     </div>
                 );
             case 'email':
