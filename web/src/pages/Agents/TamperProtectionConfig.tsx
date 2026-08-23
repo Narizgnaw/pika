@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {Alert, App, Button, Card, Form, Input, List, Space, Switch} from 'antd';
+import {Alert, App, Button, Form, Input, List, Space, Spin, Switch} from 'antd';
 import {Plus, Save, Shield, Trash2} from 'lucide-react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {getTamperConfig, updateTamperConfig} from '@/api/tamper';
@@ -70,14 +70,12 @@ const TamperProtectionConfig: React.FC<TamperProtectionConfigProps> = ({agentId}
     }, [config, form]);
 
     return (
-        <Card
-            title={
-                <div className="flex items-center gap-2">
+        <div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1f2329] dark:text-[#e6e8ec]">
                     <Shield size={18}/>
                     <span>防篡改保护配置</span>
                 </div>
-            }
-            extra={
                 <Button
                     type="primary"
                     icon={<Save size={16}/>}
@@ -86,10 +84,13 @@ const TamperProtectionConfig: React.FC<TamperProtectionConfigProps> = ({agentId}
                 >
                     保存配置
                 </Button>
-            }
-            loading={isLoading}
-        >
-            <Space orientation="vertical" style={{width: '100%'}} size="large">
+            </div>
+            {isLoading ? (
+                <div className="text-center py-12">
+                    <Spin/>
+                </div>
+            ) : (
+                <Space orientation="vertical" style={{width: '100%'}} size="large" className="mt-4">
                 <Alert
                     title="防篡改保护通过设置目录的不可变属性来防止文件被修改、删除或重命名。配置更新后将实时同步到探针。"
                     type="info"
@@ -180,7 +181,8 @@ const TamperProtectionConfig: React.FC<TamperProtectionConfigProps> = ({agentId}
                     />
                 )}
             </Space>
-        </Card>
+            )}
+        </div>
     );
 };
 

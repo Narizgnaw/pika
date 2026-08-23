@@ -2,11 +2,12 @@ import {useEffect, useState} from 'react';
 import {useNavigate, useParams, useSearchParams} from 'react-router-dom';
 import type {TabsProps} from 'antd';
 import {Alert, Spin, Tabs, Tag} from 'antd';
-import {Activity, ArrowLeft, FileWarning, Lock, Shield, TrendingUp} from 'lucide-react';
-import {useQuery} from '@tanstack/react-query';
-import {getAgentForAdmin} from '@/api/agent.ts';
+import {Activity, ArrowLeft, Edit, FileWarning, Lock, Shield, TrendingUp} from 'lucide-react';
+import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {getAgentForAdmin, getTags} from '@/api/agent.ts';
 import AgentBasicInfo from './AgentBasicInfo';
 import AgentAudit from './AgentAudit';
+import AgentEditModal from './AgentEditModal';
 import TamperProtection from './TamperProtection';
 import SSHLoginMonitor from './SSHLoginMonitor';
 import TrafficStats from './TrafficStats';
@@ -16,8 +17,10 @@ import {PagePanel} from '@/components/PagePanel';
 const AgentDetail = () => {
     const {id} = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const [searchParams, setSearchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState<string>(searchParams.get('tab') || 'info');
+    const [editModalVisible, setEditModalVisible] = useState(false);
 
     // 获取探针基本信息（用于显示头部卡片）
     const {data: agent, isLoading} = useQuery({
@@ -28,6 +31,15 @@ const AgentDetail = () => {
             return response.data;
         },
         enabled: !!id,
+    });
+
+    // 获取标签列表（编辑探针弹窗使用）
+    const {data: tags = []} = useQuery({
+        queryKey: ['admin', 'agents', 'tags'],
+        queryFn: async () => {
+            const response = await getTags();
+            return response.data.tags || [];
+        },
     });
 
     useEffect(() => {
@@ -136,28 +148,28 @@ const AgentDetail = () => {
     return (
         <div className="space-y-4">
             <PageHeader
-                title={agent.name || agent.hostname}
+                title={
+                    <span className="flex flex-wrap items-center gap-2.5">
+                        {agent.name || agent.hostname}
+                        <button
+                            type="button"
+                            onClick={() => navigate('/admin/agents')}
+                            className="flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-xs font-normal text-[#646a73] transition-colors hover:text-[#1677ff] dark:text-[#9ba1ab] dark:hover:text-[#75adff]"
+                        >
+                            <ArrowLeft size={12}/>
+                            <span>返回列表</span>
+                        </button>
+                    </span>
+                }
+                extra={agent.status === 1 ? <Tag color="success">在线</Tag> : <Tag color="error">离线</Tag>}
                 actions={[{
-                    key: 'back',
-                    label: '返回列表',
-                    icon: <ArrowLeft size={16}/>,
-                    onClick: () => navigate('/admin/agents'),
+                    key: 'edit',
+                    label: '编辑探针',
+                    type: 'primary',
+                    icon: <Edit size={16}/>,
+                    onClick: () => setEditModalVisible(true),
                 }]}
             />
-
-            <PagePanel>
-                <div className="flex items-center gap-3">
-                    <div className="grid h-10 w-10 place-items-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
-                        <Activity size={21}/>
-                    </div>
-                    <div>
-                        <div className="text-sm font-medium text-gray-800 dark:text-gray-100">当前连接状态</div>
-                        <div className="mt-1">
-                            {agent.status === 1 ? <Tag color="success">在线</Tag> : <Tag color="error">离线</Tag>}
-                        </div>
-                    </div>
-                </div>
-            </PagePanel>
 
             {/* Tabs 内容 */}
             <PagePanel>
@@ -167,6 +179,18 @@ const AgentDetail = () => {
                     items={tabItems}
                 />
             </PagePanel>
+
+            {/* 编辑探针模态框 */}
+            <AgentEditModal
+                open={editModalVisible}
+                agentId={id}
+                existingTags={tags}
+                onCancel={() => setEditModalVisible(false)}
+                onSuccess={() => {
+                    setEditModalVisible(false);
+                    queryClient.invalidateQueries({queryKey: ['admin', 'agent', id]});
+                }}
+            />
         </div>
     );
 };

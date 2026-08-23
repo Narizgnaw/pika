@@ -1,31 +1,17 @@
-import {useState} from 'react';
-import {App, Button, Card, Descriptions, Space, Spin, Tag} from 'antd';
-import {Clock, Edit, RefreshCw} from 'lucide-react';
+import {Descriptions, Space, Spin, Tag} from 'antd';
+import {Clock} from 'lucide-react';
 import {useQuery} from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import {getAgentForAdmin, getAgentLatestMetricsForAdmin, getTags} from '@/api/agent.ts';
-import AgentEditModal from './AgentEditModal';
+import {getAgentForAdmin, getAgentLatestMetricsForAdmin} from '@/api/agent.ts';
 
 interface AgentBasicInfoProps {
     agentId: string;
 }
 
 const AgentBasicInfo = ({agentId}: AgentBasicInfoProps) => {
-    const {message: messageApi} = App.useApp();
-    const [editModalVisible, setEditModalVisible] = useState(false);
-
-    const {data: tags = []} = useQuery({
-        queryKey: ['admin', 'agents', 'tags'],
-        queryFn: async () => {
-            const response = await getTags();
-            return response.data.tags || [];
-        },
-    });
-
     const {
         data: agent,
         isLoading: agentLoading,
-        refetch: refetchAgent,
     } = useQuery({
         queryKey: ['admin', 'agent', agentId],
         queryFn: async () => {
@@ -38,7 +24,6 @@ const AgentBasicInfo = ({agentId}: AgentBasicInfoProps) => {
     const {
         data: latestMetrics,
         isLoading: metricsLoading,
-        refetch: refetchMetrics,
     } = useQuery({
         queryKey: ['admin', 'agent', agentId, 'metrics', 'latest'],
         queryFn: async () => {
@@ -47,11 +32,6 @@ const AgentBasicInfo = ({agentId}: AgentBasicInfoProps) => {
         },
         enabled: !!agentId,
     });
-
-    const handleRefresh = () => {
-        refetchAgent();
-        refetchMetrics();
-    };
 
     if (agentLoading || metricsLoading) {
         return (
@@ -98,28 +78,7 @@ const AgentBasicInfo = ({agentId}: AgentBasicInfoProps) => {
 
     return (
         <div>
-            <Card
-                title="探针详细信息"
-                variant="outlined"
-                extra={
-                    <Space>
-                        <Button
-                            icon={<RefreshCw size={16}/>}
-                            onClick={handleRefresh}
-                        >
-                            刷新
-                        </Button>
-                        <Button
-                            type="primary"
-                            icon={<Edit size={16}/>}
-                            onClick={() => setEditModalVisible(true)}
-                        >
-                            编辑探针
-                        </Button>
-                    </Space>
-                }
-            >
-                <Descriptions column={{xs: 1, sm: 2, lg: 3}} bordered>
+            <Descriptions column={{xs: 1, sm: 2, lg: 3, xl: 4}} bordered>
                     <Descriptions.Item label="探针名称">{agent.name || '-'}</Descriptions.Item>
                     <Descriptions.Item label="主机名">{agent.hostname || '-'}</Descriptions.Item>
                     <Descriptions.Item label="探针ID">
@@ -242,19 +201,6 @@ const AgentBasicInfo = ({agentId}: AgentBasicInfoProps) => {
                         ) : '-'}
                     </Descriptions.Item>
                 </Descriptions>
-            </Card>
-
-            {/* 编辑模态框 */}
-            <AgentEditModal
-                open={editModalVisible}
-                agentId={agentId}
-                existingTags={tags}
-                onCancel={() => setEditModalVisible(false)}
-                onSuccess={() => {
-                    setEditModalVisible(false);
-                    refetchAgent();
-                }}
-            />
         </div>
     );
 };

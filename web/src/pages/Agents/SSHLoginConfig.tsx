@@ -1,5 +1,5 @@
 import React, {useEffect} from 'react';
-import {Alert, App, Button, Card, Form, Input, Space, Switch} from 'antd';
+import {Alert, App, Button, Form, Input, Space, Spin, Switch} from 'antd';
 import {Save, Terminal} from 'lucide-react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import type {SSHLoginConfig as SSHLoginConfigType} from '@/types';
@@ -96,14 +96,12 @@ const SSHLoginConfig: React.FC<SSHLoginConfigProps> = ({agentId}) => {
     }, [config, form]);
 
     return (
-        <Card
-            title={
-                <div className="flex items-center gap-2">
+        <div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-[15px] font-semibold text-[#1f2329] dark:text-[#e6e8ec]">
                     <Terminal size={18}/>
                     <span>SSH 登录监控配置</span>
                 </div>
-            }
-            extra={
                 <Button
                     type="primary"
                     icon={<Save size={16}/>}
@@ -112,10 +110,13 @@ const SSHLoginConfig: React.FC<SSHLoginConfigProps> = ({agentId}) => {
                 >
                     保存配置
                 </Button>
-            }
-            loading={isLoading}
-        >
-            <Space direction="vertical" style={{width: '100%'}} size="large">
+            </div>
+            {isLoading ? (
+                <div className="text-center py-12">
+                    <Spin/>
+                </div>
+            ) : (
+                <Space direction="vertical" style={{width: '100%'}} size="large" className="mt-4">
                 <Form
                     form={form}
                     layout="vertical"
@@ -165,7 +166,8 @@ const SSHLoginConfig: React.FC<SSHLoginConfigProps> = ({agentId}) => {
                     />
                 )}
             </Space>
-        </Card>
+            )}
+        </div>
     );
 };
 

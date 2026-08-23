@@ -14,7 +14,7 @@ export interface Action {
 }
 
 interface PageHeaderProps {
-    title: string;
+    title: React.ReactNode;
     extra?: React.ReactNode;
     actions?: Action[];
 }

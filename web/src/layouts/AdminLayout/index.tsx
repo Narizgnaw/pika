@@ -11,17 +11,18 @@ import type {User} from '@/types';
 const AdminLayout = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const isWideCompactPage = [
-        '/admin/agents',
-        '/admin/monitors',
-        '/admin/ddns',
-        '/admin/api-keys',
-        '/admin/manage-api-keys',
-        '/admin/alert-records',
-        '/admin/agents-install/one-click',
-        '/admin/agents-install/manual',
-        '/admin/settings',
-    ].includes(location.pathname);
+    // /admin/agents 前缀（含探针详情页）使用全宽布局
+    const isWideCompactPage = location.pathname.startsWith('/admin/agents')
+        || [
+            '/admin/monitors',
+            '/admin/ddns',
+            '/admin/api-keys',
+            '/admin/manage-api-keys',
+            '/admin/alert-records',
+            '/admin/agents-install/one-click',
+            '/admin/agents-install/manual',
+            '/admin/settings',
+        ].includes(location.pathname);
     const [userInfo, setUserInfo] = useState<User | null>(null);
     const themeButtonRef = useRef<HTMLButtonElement>(null);
     const {appliedTheme, toggleTheme} = useThemeToggle(themeButtonRef);
