@@ -114,7 +114,7 @@ const AlertSettings = () => {
             <SettingsSection
                 title="告警规则"
                 divided={false}
-                description="主机按优先级（数字越小越优先）命中第一条启用的规则；未命中任何规则的主机不产生告警与通知。每条规则可配置阈值、事件通知开关与推送渠道。"
+                description="主机按优先级（数字越小越优先）命中第一条启用的规则；未命中任何规则的主机不产生告警与通知。每条规则可配置阈值、每日计划维护、事件通知开关与推送渠道。"
                 extra={(
                     <Button
                         type="primary"
@@ -148,6 +148,11 @@ const AlertSettings = () => {
                                             优先级 {rule.priority}
                                         </Tag>
                                         {rule.maskIP && <Tag style={{margin: 0}}>IP打码</Tag>}
+                                        {rule.maintenanceEnabled && (
+                                            <Tag color="cyan" style={{margin: 0}}>
+                                                每日免告警 {rule.maintenanceStartTime}–{rule.maintenanceEndTime}
+                                            </Tag>
+                                        )}
                                     </div>
                                     <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#646a73] dark:text-[#9ba1ab]">
                                         {renderRuleTarget(rule)}

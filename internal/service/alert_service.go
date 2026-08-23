@@ -91,6 +91,10 @@ func (s *AlertService) CheckMetrics(ctx context.Context, agentID string, cpu, me
 	if config == nil {
 		return nil
 	}
+	nowTime := time.Now()
+	if config.IsInMaintenance(nowTime) {
+		return nil
+	}
 
 	// 获取探针信息（用于发送通知）
 	agent, err := s.agentRepo.FindById(ctx, agentID)
@@ -99,7 +103,7 @@ func (s *AlertService) CheckMetrics(ctx context.Context, agentID string, cpu, me
 		return err
 	}
 
-	now := time.Now().UnixMilli()
+	now := nowTime.UnixMilli()
 
 	// 检查 CPU 告警
 	if config.Rules.CPUEnabled {
@@ -154,6 +158,7 @@ func (s *AlertService) checkAlert(ctx context.Context, config *EffectiveAlertCon
 		if state.StartTime == 0 {
 			state.StartTime = now
 		}
+		state.StartTime = config.ConditionStartAfterMaintenance(time.UnixMilli(now), state.StartTime)
 
 		elapsedSeconds := (now - state.StartTime) / 1000
 		if elapsedSeconds >= int64(duration) && !state.IsFiring {
@@ -676,6 +681,9 @@ func (s *AlertService) checkCertificateAlerts(ctx context.Context, now int64) er
 		if config == nil || !config.Rules.CertEnabled {
 			continue
 		}
+		if config.IsInMaintenance(time.UnixMilli(now)) {
+			continue
+		}
 
 		certDaysLeft := float64(monitor.CertDaysLeft)
 
@@ -892,6 +900,9 @@ func (s *AlertService) checkServiceDownAlerts(ctx context.Context, now int64) er
 		if config == nil || !config.Rules.ServiceEnabled {
 			continue
 		}
+		if config.IsInMaintenance(time.UnixMilli(now)) {
+			continue
+		}
 
 		stateKey := fmt.Sprintf("%s:%s:service:%s", agent.ID, config.ConfigID, monitor.MonitorId)
 
@@ -917,6 +928,7 @@ func (s *AlertService) checkServiceDownAlerts(ctx context.Context, now int64) er
 			if state.StartTime == 0 {
 				state.StartTime = monitor.CheckedAt
 			}
+			state.StartTime = config.ConditionStartAfterMaintenance(time.UnixMilli(now), state.StartTime)
 
 			elapsedSeconds := (now - state.StartTime) / 1000
 			if elapsedSeconds >= int64(config.Rules.ServiceDuration) && !state.IsFiring {
@@ -1059,13 +1071,21 @@ func (s *AlertService) checkAgentOfflineAlerts(ctx context.Context, now int64) e
 		if config == nil || !config.Rules.AgentOfflineEnabled {
 			continue
 		}
+		if config.IsInMaintenance(time.UnixMilli(now)) {
+			continue
+		}
 
 		stateKey := fmt.Sprintf("%s:%s:agent_offline:%s", agent.ID, config.ConfigID, agent.ID)
 
 		// 防止时钟回拨导致负数
-		offlineSeconds := int64(0)
+		rawOfflineSeconds := int64(0)
 		if now > agent.LastSeenAt {
-			offlineSeconds = (now - agent.LastSeenAt) / 1000
+			rawOfflineSeconds = (now - agent.LastSeenAt) / 1000
+		}
+		offlineStartTime := config.ConditionStartAfterMaintenance(time.UnixMilli(now), agent.LastSeenAt)
+		offlineSeconds := int64(0)
+		if now > offlineStartTime {
+			offlineSeconds = (now - offlineStartTime) / 1000
 		}
 
 		// 从数据库加载状态
@@ -1085,18 +1105,20 @@ func (s *AlertService) checkAgentOfflineAlerts(ctx context.Context, now int64) e
 		state.Duration = config.Rules.AgentOfflineDuration
 		state.Threshold = float64(config.Rules.AgentOfflineDuration)
 		state.Value = float64(offlineSeconds)
+		state.StartTime = offlineStartTime
 		state.LastCheckTime = now
 
 		var shouldFire, shouldResolve bool
 
-		if offlineSeconds >= int64(config.Rules.AgentOfflineDuration) {
+		if state.IsFiring {
+			// 已有告警只在探针实际恢复后解除，不能因为维护结束后重新累计而伪造恢复。
+			if rawOfflineSeconds < int64(config.Rules.AgentOfflineDuration) {
+				shouldResolve = true
+			}
+		} else if offlineSeconds >= int64(config.Rules.AgentOfflineDuration) {
 			if !state.IsFiring {
 				shouldFire = true
 				state.IsFiring = true
-			}
-		} else {
-			if state.IsFiring {
-				shouldResolve = true
 			}
 		}
 

@@ -1,6 +1,7 @@
 import {useEffect, useMemo} from 'react';
-import {App, Form, Input, InputNumber, Modal, Radio, Select, Switch} from 'antd';
+import {App, Form, Input, InputNumber, Modal, Radio, Select, Switch, TimePicker} from 'antd';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import dayjs from 'dayjs';
 import {listAgentsByAdmin, getTags} from '@/api/agent.ts';
 import {createAlertRule, updateAlertRule, type AlertRuleRequest} from '@/api/alertRule.ts';
 import type {Agent, AlertRule} from '@/types';
@@ -31,6 +32,13 @@ const CHANNEL_TYPE_OPTIONS = [
     {label: 'Telegram', value: 'telegram'},
     {label: '邮件', value: 'email'},
     {label: '自定义 Webhook', value: 'webhook'},
+];
+
+const MAINTENANCE_TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+
+const createMaintenanceTimeRange = (startTime = '02:00', endTime = '02:20') => [
+    dayjs(`2000-01-01T${MAINTENANCE_TIME_PATTERN.test(startTime) ? startTime : '02:00'}:00`),
+    dayjs(`2000-01-01T${MAINTENANCE_TIME_PATTERN.test(endTime) ? endTime : '02:20'}:00`),
 ];
 
 const AlertRuleModal = ({open, rule, onCancel, onSuccess}: AlertRuleModalProps) => {
@@ -69,6 +77,7 @@ const AlertRuleModal = ({open, rule, onCancel, onSuccess}: AlertRuleModalProps) 
     );
 
     const watchTargetType = Form.useWatch('targetType', form) || 'all';
+    const watchMaintenanceEnabled = Form.useWatch('maintenanceEnabled', form) ?? false;
 
     useEffect(() => {
         if (!open) {
@@ -86,6 +95,11 @@ const AlertRuleModal = ({open, rule, onCancel, onSuccess}: AlertRuleModalProps) 
                 channels: rule.channels || [],
                 maskIP: rule.maskIP ?? false,
                 notifications: {...DEFAULT_ALERT_NOTIFICATIONS, ...rule.notifications},
+                maintenanceEnabled: rule.maintenanceEnabled ?? false,
+                maintenanceTimeRange: createMaintenanceTimeRange(
+                    rule.maintenanceStartTime,
+                    rule.maintenanceEndTime,
+                ),
                 rules: rule.rules,
             });
         } else {
@@ -99,6 +113,8 @@ const AlertRuleModal = ({open, rule, onCancel, onSuccess}: AlertRuleModalProps) 
                 channels: [],
                 maskIP: false,
                 notifications: DEFAULT_ALERT_NOTIFICATIONS,
+                maintenanceEnabled: false,
+                maintenanceTimeRange: createMaintenanceTimeRange(),
                 rules: DEFAULT_ALERT_RULES,
             });
         }
@@ -131,6 +147,7 @@ const AlertRuleModal = ({open, rule, onCancel, onSuccess}: AlertRuleModalProps) 
     const handleOk = async () => {
         try {
             const values = await form.validateFields();
+            const [maintenanceStart, maintenanceEnd] = values.maintenanceTimeRange || createMaintenanceTimeRange();
             const payload: AlertRuleRequest = {
                 name: values.name?.trim(),
                 priority: values.priority ?? 0,
@@ -141,6 +158,9 @@ const AlertRuleModal = ({open, rule, onCancel, onSuccess}: AlertRuleModalProps) 
                 channels: values.channels || [],
                 maskIP: values.maskIP ?? false,
                 notifications: values.notifications || DEFAULT_ALERT_NOTIFICATIONS,
+                maintenanceEnabled: values.maintenanceEnabled ?? false,
+                maintenanceStartTime: maintenanceStart.format('HH:mm'),
+                maintenanceEndTime: maintenanceEnd.format('HH:mm'),
                 rules: values.rules,
             };
             if (isEditMode) {
@@ -257,6 +277,44 @@ const AlertRuleModal = ({open, rule, onCancel, onSuccess}: AlertRuleModalProps) 
                 >
                     <Switch checkedChildren="开启" unCheckedChildren="关闭"/>
                 </Form.Item>
+
+                <div className="mb-2 text-[13px] font-semibold text-[#1f2329] dark:text-[#e6e8ec]">
+                    计划维护
+                </div>
+                <Form.Item
+                    label="每天定时免告警"
+                    name="maintenanceEnabled"
+                    valuePropName="checked"
+                    extra="适用于定时重启、例行维护等场景。该时段内暂停本规则的监控告警，不生成告警记录，也不发送通知；时段结束后重新计算告警持续时间。事件通知和机器到期提醒不受影响。"
+                >
+                    <Switch checkedChildren="开启" unCheckedChildren="关闭"/>
+                </Form.Item>
+
+                {watchMaintenanceEnabled && (
+                    <Form.Item
+                        label="每日免告警时间"
+                        name="maintenanceTimeRange"
+                        rules={[
+                            {required: true, message: '请选择每日免告警时间'},
+                            {
+                                validator: async (_, value) => {
+                                    if (value?.[0]?.format('HH:mm') === value?.[1]?.format('HH:mm')) {
+                                        throw new Error('开始时间和结束时间不能相同');
+                                    }
+                                },
+                            },
+                        ]}
+                        extra="按服务端时区每天生效，支持跨天，例如 23:50–00:20。"
+                    >
+                        <TimePicker.RangePicker
+                            format="HH:mm"
+                            minuteStep={5}
+                            allowClear={false}
+                            placeholder={['开始时间', '结束时间']}
+                            style={{width: '100%'}}
+                        />
+                    </Form.Item>
+                )}
 
                 <div className="mb-2 text-[13px] font-semibold text-[#1f2329] dark:text-[#e6e8ec]">
                     事件通知

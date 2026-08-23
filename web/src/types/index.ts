@@ -523,6 +523,9 @@ export interface AlertRule {
     channels: string[];      // 通知渠道类型列表（空 = 所有启用渠道）
     maskIP: boolean;         // 通知中是否打码 IP 地址
     notifications: AlertNotifications; // 事件通知开关（流量/SSH登录/防篡改/机器到期）
+    maintenanceEnabled: boolean;   // 是否启用每日计划维护
+    maintenanceStartTime: string;  // 每日计划维护开始时间（HH:mm）
+    maintenanceEndTime: string;    // 每日计划维护结束时间（HH:mm）
     createdAt: number;
     updatedAt: number;
 }
