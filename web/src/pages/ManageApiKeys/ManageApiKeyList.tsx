@@ -212,7 +212,7 @@ const ManageApiKeyList = () => {
     ];
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <PageHeader
                 title="API密钥管理"
                 extra={(

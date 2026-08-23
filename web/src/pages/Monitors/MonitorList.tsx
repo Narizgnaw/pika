@@ -230,7 +230,7 @@ const MonitorList = () => {
     const total = monitorPaging?.total || 0;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <PageHeader
                 title="服务监控"
                 extra={(

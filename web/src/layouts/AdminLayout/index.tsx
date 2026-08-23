@@ -20,6 +20,7 @@ const AdminLayout = () => {
         '/admin/alert-records',
         '/admin/agents-install/one-click',
         '/admin/agents-install/manual',
+        '/admin/settings',
     ].includes(location.pathname);
     const [userInfo, setUserInfo] = useState<User | null>(null);
     const themeButtonRef = useRef<HTMLButtonElement>(null);

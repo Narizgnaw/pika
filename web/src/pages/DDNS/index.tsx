@@ -268,7 +268,7 @@ const DDNSPage = () => {
     ];
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <PageHeader
                 title="DDNS 配置管理"
                 extra={(

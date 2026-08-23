@@ -123,7 +123,14 @@ const ThemeSettings = () => {
 
     return (
         <div className="flex w-full min-w-0 flex-col gap-4">
-            <div className="flex justify-end">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="min-w-0 flex-1">
+                    <Alert
+                        type="warning"
+                        showIcon
+                        title="只安装你信任的主题：第三方主题会在 Pika 同一域名下执行 JavaScript，安装前请确认来源可信。"
+                    />
+                </div>
                 <div className="shrink-0">
                     <Upload
                         accept=".zip,application/zip"
@@ -138,12 +145,6 @@ const ThemeSettings = () => {
                     </Upload>
                 </div>
             </div>
-
-            <Alert
-                type="warning"
-                showIcon
-                title="只安装你信任的主题：第三方主题会在 Pika 同一域名下执行 JavaScript，安装前请确认来源可信。"
-            />
 
             {themesQuery.isLoading ? (
                 <div className="flex min-h-72 items-center justify-center">

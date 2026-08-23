@@ -459,7 +459,7 @@ const AgentList = () => {
     ];
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <PageHeader
                 title="探针管理"
                 extra={(

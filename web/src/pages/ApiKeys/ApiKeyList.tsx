@@ -240,7 +240,7 @@ const ApiKeyList = () => {
     ];
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <PageHeader
                 title="通信密钥管理"
                 extra={(
