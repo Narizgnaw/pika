@@ -7,13 +7,18 @@ interface SettingsSectionProps {
     /** 渲染与上一区块的分隔线，首个区块传 false */
     divided?: boolean;
     className?: string;
+    /** 标题行右侧内容（如操作按钮） */
+    extra?: ReactNode;
     children: ReactNode;
 }
 
 /** 设置页内部的平铺分区：标题 + 描述 + 内容，用分隔线取代嵌套卡片。 */
-export const SettingsSection = ({title, description, divided = true, className, children}: SettingsSectionProps) => (
+export const SettingsSection = ({title, description, divided = true, className, extra, children}: SettingsSectionProps) => (
     <section className={cn(divided && 'mt-6 border-t border-[#e8ebf0] pt-5 dark:border-[#272b33]', className)}>
-        <h3 className="m-0 text-sm font-semibold text-[#1f2329] dark:text-[#e6e8ec]">{title}</h3>
+        <div className="flex min-w-0 items-center justify-between gap-3">
+            <h3 className="m-0 text-sm font-semibold text-[#1f2329] dark:text-[#e6e8ec]">{title}</h3>
+            {extra ? <div className="shrink-0">{extra}</div> : null}
+        </div>
         {description ? (
             <p className="mt-1 mb-0 text-xs text-[#646a73] dark:text-[#9ba1ab]">{description}</p>
         ) : null}

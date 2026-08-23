@@ -508,12 +508,22 @@ export interface AlertNotifications {
     tamperEventEnabled: boolean;     // 防篡改事件通知
 }
 
-// 全局告警配置（现在存储在 Property 中）
-export interface AlertConfig {
-    enabled: boolean;  // 全局告警开关
-    maskIP: boolean;   // 是否在通知中打码 IP 地址
+// 告警规则（针对一批主机的一套告警规则与通知渠道）
+export interface AlertRule {
+    id: string;
+    name: string;
+    priority: number;        // 优先级，数字越小越优先
+    enabled: boolean;
+    targetType: string;      // 主机目标类型: all-全部, agents-指定主机, tags-按标签
+    agentIds: string[];
+    agentNames?: string[];
+    tags: string[];          // 适用标签列表（targetType=tags 时有效）
     rules: AlertRules;
-    notifications: AlertNotifications;
+    channels: string[];      // 通知渠道类型列表（空 = 所有启用渠道）
+    maskIP: boolean;         // 通知中是否打码 IP 地址
+    notifications: AlertNotifications; // 事件通知开关（流量/SSH登录/防篡改）
+    createdAt: number;
+    updatedAt: number;
 }
 
 export interface AlertRecord {

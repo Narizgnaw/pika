@@ -2,7 +2,7 @@ import {useEffect, useMemo} from 'react';
 import {App, Button, Form, Input, InputNumber, Modal, Select, Space, Switch} from 'antd';
 import {MinusCircle, PlusCircle} from 'lucide-react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {listAgentsByAdmin} from '@/api/agent.ts';
+import {listAgentsByAdmin, getTags} from '@/api/agent.ts';
 import {createMonitor, getMonitor, updateMonitor} from '@/api/monitor.ts';
 import type {Agent, MonitorTaskRequest} from '@/types';
 import {getErrorMessage} from '@/lib/utils';
@@ -34,6 +34,15 @@ const MonitorModal = ({open, monitorId, onCancel, onSuccess}: MonitorModalProps)
             const response = await listAgentsByAdmin();
             return response.data || [];
         },
+        enabled: open,
+    });
+
+    const {
+        data: tagsData,
+        isLoading: loadingTags,
+    } = useQuery({
+        queryKey: ['agents', 'tags'],
+        queryFn: getTags,
         enabled: open,
     });
 
@@ -70,6 +79,11 @@ const MonitorModal = ({open, monitorId, onCancel, onSuccess}: MonitorModalProps)
                 value: agent.id,
             })),
         [agents],
+    );
+
+    const tagOptions = useMemo(
+        () => (tagsData?.data?.tags || []).map((tag: string) => ({label: tag, value: tag})),
+        [tagsData],
     );
 
     useEffect(() => {
@@ -266,12 +280,26 @@ const MonitorModal = ({open, monitorId, onCancel, onSuccess}: MonitorModalProps)
                     }/>
                 </Form.Item>
 
-                <Form.Item label="探针范围" name="agentIds" extra="选择特定探针节点执行此监控">
+                <Form.Item
+                    label="探针范围"
+                    name="agentIds"
+                    extra="指定探针与标签取并集，均不选择时由所有探针执行此监控"
+                >
                     <Select
                         mode="multiple"
                         placeholder="选择探针节点（可多选）"
                         options={agentOptions}
                         loading={loadingAgents}
+                        allowClear
+                    />
+                </Form.Item>
+
+                <Form.Item label="按标签" name="tags" extra="拥有所选标签的探针都会执行此监控，便于批量调整">
+                    <Select
+                        mode="multiple"
+                        placeholder="选择标签（可多选）"
+                        options={tagOptions}
+                        loading={loadingTags}
                         allowClear
                     />
                 </Form.Item>

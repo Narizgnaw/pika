@@ -195,7 +195,7 @@ func (s *SSHLoginService) sendLoginSuccessNotification(ctx context.Context, agen
 
 	sourceIP := eventData.IP
 	if s.notificationSvc != nil {
-		if maskIP, err := s.notificationSvc.IsMaskIPEnabled(ctx); err == nil && maskIP {
+		if s.notificationSvc.ResolveMaskIP(ctx, agentID) {
 			sourceIP = maskIPAddress(sourceIP)
 		}
 	}

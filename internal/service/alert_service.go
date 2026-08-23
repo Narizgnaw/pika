@@ -26,21 +26,23 @@ type AlertService struct {
 	agentRepo         *repo.AgentRepo
 	monitorService    *MonitorService
 	propertyService   *PropertyService
+	alertRuleService  *AlertRuleService
 	notifier          *Notifier
 	notificationQueue *NotificationQueue
 	logger            *zap.Logger
 }
 
-func NewAlertService(logger *zap.Logger, db *gorm.DB, propertyService *PropertyService, monitorService *MonitorService, notifier *Notifier) *AlertService {
+func NewAlertService(logger *zap.Logger, db *gorm.DB, propertyService *PropertyService, alertRuleService *AlertRuleService, monitorService *MonitorService, notifier *Notifier) *AlertService {
 	service := &AlertService{
-		Service:         orz.NewService(db),
-		AlertRecordRepo: repo.NewAlertRecordRepo(db),
-		AlertStateRepo:  repo.NewAlertStateRepo(db),
-		agentRepo:       repo.NewAgentRepo(db),
-		monitorService:  monitorService,
-		propertyService: propertyService,
-		notifier:        notifier,
-		logger:          logger,
+		Service:          orz.NewService(db),
+		AlertRecordRepo:  repo.NewAlertRecordRepo(db),
+		AlertStateRepo:   repo.NewAlertStateRepo(db),
+		agentRepo:        repo.NewAgentRepo(db),
+		monitorService:   monitorService,
+		propertyService:  propertyService,
+		alertRuleService: alertRuleService,
+		notifier:         notifier,
+		logger:           logger,
 	}
 
 	service.notificationQueue = NewNotificationQueue(db, service, service.AlertRecordRepo, logger)
@@ -76,15 +78,15 @@ func (s *AlertService) Shutdown() {
 
 // CheckMetrics 检查指标并触发告警
 func (s *AlertService) CheckMetrics(ctx context.Context, agentID string, cpu, memory, disk, networkSpeed float64) error {
-	// 获取全局告警配置
-	alertConfig, err := s.propertyService.GetAlertConfig(ctx)
+	// 解析该主机生效的告警配置（按优先级命中的第一条规则，未命中任何规则时不告警）
+	config, err := s.alertRuleService.ResolveForAgent(ctx, agentID)
 	if err != nil {
-		s.logger.Error("获取全局告警配置失败", zap.Error(err))
+		s.logger.Error("解析告警配置失败", zap.String("agentId", agentID), zap.Error(err))
 		return err
 	}
 
-	// 如果全局告警未启用，直接返回
-	if !alertConfig.Enabled {
+	// 未命中任何规则的主机不产生告警
+	if config == nil {
 		return nil
 	}
 
@@ -98,31 +100,31 @@ func (s *AlertService) CheckMetrics(ctx context.Context, agentID string, cpu, me
 	now := time.Now().UnixMilli()
 
 	// 检查 CPU 告警
-	if alertConfig.Rules.CPUEnabled {
-		s.checkAlert(ctx, alertConfig, &agent, "cpu", cpu, alertConfig.Rules.CPUThreshold, alertConfig.Rules.CPUDuration, now)
+	if config.Rules.CPUEnabled {
+		s.checkAlert(ctx, config, &agent, "cpu", cpu, config.Rules.CPUThreshold, config.Rules.CPUDuration, now)
 	}
 
 	// 检查内存告警
-	if alertConfig.Rules.MemoryEnabled {
-		s.checkAlert(ctx, alertConfig, &agent, "memory", memory, alertConfig.Rules.MemoryThreshold, alertConfig.Rules.MemoryDuration, now)
+	if config.Rules.MemoryEnabled {
+		s.checkAlert(ctx, config, &agent, "memory", memory, config.Rules.MemoryThreshold, config.Rules.MemoryDuration, now)
 	}
 
 	// 检查磁盘告警
-	if alertConfig.Rules.DiskEnabled {
-		s.checkAlert(ctx, alertConfig, &agent, "disk", disk, alertConfig.Rules.DiskThreshold, alertConfig.Rules.DiskDuration, now)
+	if config.Rules.DiskEnabled {
+		s.checkAlert(ctx, config, &agent, "disk", disk, config.Rules.DiskThreshold, config.Rules.DiskDuration, now)
 	}
 
 	// 检查网速告警
-	if alertConfig.Rules.NetworkEnabled {
-		s.checkAlert(ctx, alertConfig, &agent, "network", networkSpeed, alertConfig.Rules.NetworkThreshold, alertConfig.Rules.NetworkDuration, now)
+	if config.Rules.NetworkEnabled {
+		s.checkAlert(ctx, config, &agent, "network", networkSpeed, config.Rules.NetworkThreshold, config.Rules.NetworkDuration, now)
 	}
 
 	return nil
 }
 
 // checkAlert 检查单个告警规则
-func (s *AlertService) checkAlert(ctx context.Context, config *models.AlertConfig, agent *models.Agent, alertType string, currentValue, threshold float64, duration int, now int64) {
-	stateKey := fmt.Sprintf("%s:global:%s", agent.ID, alertType)
+func (s *AlertService) checkAlert(ctx context.Context, config *EffectiveAlertConfig, agent *models.Agent, alertType string, currentValue, threshold float64, duration int, now int64) {
+	stateKey := fmt.Sprintf("%s:%s:%s", agent.ID, config.ConfigID, alertType)
 
 	var shouldFire, shouldResolve bool
 
@@ -140,6 +142,7 @@ func (s *AlertService) checkAlert(ctx context.Context, config *models.AlertConfi
 	// 按探针维度更新最新阈值/持续时间，支持配置变更
 	state.AgentID = agent.ID
 	state.AlertType = alertType
+	state.ConfigID = config.ConfigID
 	state.Threshold = threshold
 	state.Duration = duration
 	state.Value = currentValue
@@ -178,7 +181,7 @@ func (s *AlertService) checkAlert(ctx context.Context, config *models.AlertConfi
 }
 
 // fireAlert 触发告警
-func (s *AlertService) fireAlert(ctx context.Context, config *models.AlertConfig, agent *models.Agent, state *models.AlertState) {
+func (s *AlertService) fireAlert(ctx context.Context, config *EffectiveAlertConfig, agent *models.Agent, state *models.AlertState) {
 	s.logger.Info("触发告警",
 		zap.String("agentId", agent.ID),
 		zap.String("agentName", agent.Name),
@@ -194,6 +197,8 @@ func (s *AlertService) fireAlert(ctx context.Context, config *models.AlertConfig
 		AgentID:     agent.ID,
 		AgentName:   agent.Name,
 		AlertType:   state.AlertType,
+		ConfigID:    config.ConfigID,
+		ConfigName:  config.Name,
 		Message:     s.buildAlertMessage(state),
 		Threshold:   state.Threshold,
 		ActualValue: state.Value,
@@ -223,7 +228,7 @@ func (s *AlertService) fireAlert(ctx context.Context, config *models.AlertConfig
 }
 
 // resolveAlert 恢复告警
-func (s *AlertService) resolveAlert(ctx context.Context, config *models.AlertConfig, agent *models.Agent, state *models.AlertState) {
+func (s *AlertService) resolveAlert(ctx context.Context, config *EffectiveAlertConfig, agent *models.Agent, state *models.AlertState) {
 	s.logger.Info("告警恢复",
 		zap.String("agentId", agent.ID),
 		zap.String("agentName", agent.Name),
@@ -320,12 +325,6 @@ func (s *AlertService) sendAlertNotification(record *models.AlertRecord, agent *
 
 // sendAlertNotificationSync 同步发送告警通知(供队列worker调用)
 func (s *AlertService) sendAlertNotificationSync(ctx context.Context, record *models.AlertRecord, agent *models.Agent) error {
-	alertConfig, err := s.propertyService.GetAlertConfig(ctx)
-	if err != nil {
-		s.logger.Error("获取告警配置失败", zap.Error(err))
-		return fmt.Errorf("获取告警配置失败: %w", err)
-	}
-
 	channelConfigs, err := s.propertyService.GetNotificationChannelConfigs(ctx)
 	if err != nil {
 		s.logger.Error("获取通知渠道配置失败", zap.Error(err))
@@ -339,33 +338,70 @@ func (s *AlertService) sendAlertNotificationSync(ctx context.Context, record *mo
 		}
 	}
 
+	// 按告警命中的规则选择推送渠道类型与 IP 打码配置（规则未指定渠道或已删除时推送所有启用渠道）
+	enabledChannels, maskIP := s.resolveChannelsAndMaskIP(ctx, record, enabledChannels)
+
 	if len(enabledChannels) == 0 {
 		return fmt.Errorf("没有启用的通知渠道")
 	}
 
-	return s.notifier.SendNotificationByConfigs(ctx, enabledChannels, record, agent, alertConfig.MaskIP)
+	return s.notifier.SendNotificationByConfigs(ctx, enabledChannels, record, agent, maskIP)
 }
 
-// CheckAgentExpireAlerts 检查机器到期提醒
-func (s *AlertService) CheckAgentExpireAlerts(ctx context.Context) error {
-	alertConfig, err := s.propertyService.GetAlertConfig(ctx)
+// resolveChannelsAndMaskIP 根据告警记录命中的规则解析渠道选择与 IP 打码配置
+func (s *AlertService) resolveChannelsAndMaskIP(ctx context.Context, record *models.AlertRecord, channels []models.NotificationChannelConfig) ([]models.NotificationChannelConfig, bool) {
+	if record.ConfigID == "" {
+		return channels, false
+	}
+
+	rule, err := s.alertRuleService.FindById(ctx, record.ConfigID)
 	if err != nil {
-		s.logger.Error("获取全局告警配置失败", zap.Error(err))
-		return err
+		return channels, false
 	}
 
-	if !alertConfig.Enabled {
-		return nil
+	if len(rule.Channels) == 0 {
+		return channels, rule.MaskIP
 	}
 
+	channelTypes := make(map[string]struct{}, len(rule.Channels))
+	for _, t := range rule.Channels {
+		channelTypes[t] = struct{}{}
+	}
+
+	filtered := make([]models.NotificationChannelConfig, 0, len(channels))
+	for _, channel := range channels {
+		if _, ok := channelTypes[channel.Type]; ok {
+			filtered = append(filtered, channel)
+		}
+	}
+	return filtered, rule.MaskIP
+}
+
+// CheckAgentExpireAlerts 检查机器到期提醒（按各主机命中的告警规则检查，未命中规则的主机不提醒）
+func (s *AlertService) CheckAgentExpireAlerts(ctx context.Context) error {
 	now := time.Now().UnixMilli()
 	agents, err := s.agentRepo.FindAll(ctx)
 	if err != nil {
 		return err
 	}
 
+	agentIds := make([]string, 0, len(agents))
 	for _, agent := range agents {
-		if err := s.checkAgentExpireAlert(ctx, &agent, now); err != nil {
+		agentIds = append(agentIds, agent.ID)
+	}
+
+	// 解析各主机生效的告警配置
+	configs, err := s.alertRuleService.ResolveForAgents(ctx, agentIds)
+	if err != nil {
+		return err
+	}
+
+	for _, agent := range agents {
+		config := configs[agent.ID]
+		if config == nil {
+			continue
+		}
+		if err := s.checkAgentExpireAlert(ctx, config, &agent, now); err != nil {
 			s.logger.Error("检查机器过期提醒失败",
 				zap.String("agentId", agent.ID),
 				zap.Error(err),
@@ -376,8 +412,8 @@ func (s *AlertService) CheckAgentExpireAlerts(ctx context.Context) error {
 	return nil
 }
 
-func (s *AlertService) checkAgentExpireAlert(ctx context.Context, agent *models.Agent, now int64) error {
-	stateKey := fmt.Sprintf("%s:global:%s:%s", agent.ID, agentExpireAlertType, agent.ID)
+func (s *AlertService) checkAgentExpireAlert(ctx context.Context, config *EffectiveAlertConfig, agent *models.Agent, now int64) error {
+	stateKey := fmt.Sprintf("%s:%s:%s:%s", agent.ID, config.ConfigID, agentExpireAlertType, agent.ID)
 	state, err := s.AlertStateRepo.GetAlertState(ctx, stateKey)
 	if err != nil {
 		state = &models.AlertState{
@@ -390,6 +426,7 @@ func (s *AlertService) checkAgentExpireAlert(ctx context.Context, agent *models.
 	daysLeft := agentExpireDaysLeft(agent.ExpireTime, now)
 	state.AgentID = agent.ID
 	state.AlertType = agentExpireAlertType
+	state.ConfigID = config.ConfigID
 	state.Threshold = float64(agentExpireReminderThreshold)
 	state.Duration = 0
 	state.Value = daysLeft
@@ -413,16 +450,16 @@ func (s *AlertService) checkAgentExpireAlert(ctx context.Context, agent *models.
 	}
 
 	if shouldFire {
-		s.fireAgentExpireAlert(ctx, agent, state, now)
+		s.fireAgentExpireAlert(ctx, config, agent, state, now)
 	}
 	if shouldResolve {
-		s.resolveAgentExpireAlert(ctx, agent, state)
+		s.resolveAgentExpireAlert(ctx, config, agent, state)
 	}
 
 	return nil
 }
 
-func (s *AlertService) fireAgentExpireAlert(ctx context.Context, agent *models.Agent, state *models.AlertState, now int64) {
+func (s *AlertService) fireAgentExpireAlert(ctx context.Context, config *EffectiveAlertConfig, agent *models.Agent, state *models.AlertState, now int64) {
 	s.logger.Info("触发机器过期提醒",
 		zap.String("agentId", agent.ID),
 		zap.String("agentName", agent.Name),
@@ -434,6 +471,8 @@ func (s *AlertService) fireAgentExpireAlert(ctx context.Context, agent *models.A
 		AgentID:     agent.ID,
 		AgentName:   agent.Name,
 		AlertType:   agentExpireAlertType,
+		ConfigID:    config.ConfigID,
+		ConfigName:  config.Name,
 		Message:     s.buildAgentExpireMessage(agent, now),
 		Threshold:   float64(agentExpireReminderThreshold),
 		ActualValue: state.Value,
@@ -457,7 +496,7 @@ func (s *AlertService) fireAgentExpireAlert(ctx context.Context, agent *models.A
 	go s.sendAlertNotification(record, agent)
 }
 
-func (s *AlertService) resolveAgentExpireAlert(ctx context.Context, agent *models.Agent, state *models.AlertState) {
+func (s *AlertService) resolveAgentExpireAlert(ctx context.Context, config *EffectiveAlertConfig, agent *models.Agent, state *models.AlertState) {
 	s.logger.Info("机器过期提醒恢复",
 		zap.String("agentId", agent.ID),
 		zap.String("agentName", agent.Name),
@@ -535,48 +574,30 @@ func agentExpireDaysLeft(expireTime int64, now int64) float64 {
 	return float64(expireTime-now) / float64(24*time.Hour/time.Millisecond)
 }
 
-// CheckMonitorAlerts 检查监控相关告警（证书和服务下线）
+// CheckMonitorAlerts 检查监控相关告警（证书、服务下线、探针离线，按各主机生效的规则检查）
 func (s *AlertService) CheckMonitorAlerts(ctx context.Context) error {
-	// 获取全局告警配置
-	alertConfig, err := s.propertyService.GetAlertConfig(ctx)
-	if err != nil {
-		s.logger.Error("获取全局告警配置失败", zap.Error(err))
-		return err
-	}
-
-	// 如果全局告警未启用，直接返回
-	if !alertConfig.Enabled {
-		return nil
-	}
-
 	now := time.Now().UnixMilli()
 
 	// 检查证书告警
-	if alertConfig.Rules.CertEnabled {
-		if err := s.checkCertificateAlerts(ctx, alertConfig, now); err != nil {
-			s.logger.Error("检查证书告警失败", zap.Error(err))
-		}
+	if err := s.checkCertificateAlerts(ctx, now); err != nil {
+		s.logger.Error("检查证书告警失败", zap.Error(err))
 	}
 
 	// 检查服务下线告警
-	if alertConfig.Rules.ServiceEnabled {
-		if err := s.checkServiceDownAlerts(ctx, alertConfig, now); err != nil {
-			s.logger.Error("检查服务下线告警失败", zap.Error(err))
-		}
+	if err := s.checkServiceDownAlerts(ctx, now); err != nil {
+		s.logger.Error("检查服务下线告警失败", zap.Error(err))
 	}
 
 	// 检查探针离线告警
-	if alertConfig.Rules.AgentOfflineEnabled {
-		if err := s.checkAgentOfflineAlerts(ctx, alertConfig, now); err != nil {
-			s.logger.Error("检查探针离线告警失败", zap.Error(err))
-		}
+	if err := s.checkAgentOfflineAlerts(ctx, now); err != nil {
+		s.logger.Error("检查探针离线告警失败", zap.Error(err))
 	}
 
 	return nil
 }
 
 // checkCertificateAlerts 检查证书告警
-func (s *AlertService) checkCertificateAlerts(ctx context.Context, config *models.AlertConfig, now int64) error {
+func (s *AlertService) checkCertificateAlerts(ctx context.Context, now int64) error {
 	// 获取所有最新的监控指标（仅HTTPS类型）
 	// 这里需要查询最新的 monitor_metrics 记录，获取证书剩余天数
 	monitors, err := s.monitorService.GetLatestMonitorMetricsByType(ctx, "http")
@@ -609,9 +630,20 @@ func (s *AlertService) checkCertificateAlerts(ctx context.Context, config *model
 		}
 	}
 
+	// 解析各主机生效的告警配置
+	configs, err := s.alertRuleService.ResolveForAgents(ctx, agentIds)
+	if err != nil {
+		return err
+	}
+
 	for _, monitor := range monitors {
 		// 如果证书不存在或已过期，跳过
 		if monitor.CertExpiryTime == 0 {
+			continue
+		}
+
+		config := configs[monitor.AgentId]
+		if config == nil || !config.Rules.CertEnabled {
 			continue
 		}
 
@@ -638,8 +670,8 @@ func (s *AlertService) checkCertificateAlerts(ctx context.Context, config *model
 }
 
 // checkCertAlert 检查并触发证书告警
-func (s *AlertService) checkCertAlert(ctx context.Context, config *models.AlertConfig, agent *models.Agent, monitor *protocol.MonitorData, certDaysLeft float64, now int64) {
-	stateKey := fmt.Sprintf("%s:global:cert:%s", agent.ID, monitor.MonitorId)
+func (s *AlertService) checkCertAlert(ctx context.Context, config *EffectiveAlertConfig, agent *models.Agent, monitor *protocol.MonitorData, certDaysLeft float64, now int64) {
+	stateKey := fmt.Sprintf("%s:%s:cert:%s", agent.ID, config.ConfigID, monitor.MonitorId)
 
 	// 从数据库加载状态
 	state, err := s.AlertStateRepo.GetAlertState(ctx, stateKey)
@@ -653,6 +685,7 @@ func (s *AlertService) checkCertAlert(ctx context.Context, config *models.AlertC
 	}
 	state.AgentID = agent.ID
 	state.AlertType = "cert"
+	state.ConfigID = config.ConfigID
 	state.Threshold = config.Rules.CertThreshold
 	state.Duration = 0
 	state.Value = certDaysLeft
@@ -695,6 +728,8 @@ func (s *AlertService) checkCertAlert(ctx context.Context, config *models.AlertC
 		AgentID:     agent.ID,
 		AgentName:   agent.Name,
 		AlertType:   "cert",
+		ConfigID:    config.ConfigID,
+		ConfigName:  config.Name,
 		Message:     message,
 		Threshold:   config.Rules.CertThreshold,
 		ActualValue: certDaysLeft,
@@ -721,8 +756,8 @@ func (s *AlertService) checkCertAlert(ctx context.Context, config *models.AlertC
 }
 
 // resolveCertAlert 恢复证书告警
-func (s *AlertService) resolveCertAlert(ctx context.Context, config *models.AlertConfig, agent *models.Agent, monitor *protocol.MonitorData, certDaysLeft float64) {
-	stateKey := fmt.Sprintf("%s:global:cert:%s", agent.ID, monitor.MonitorId)
+func (s *AlertService) resolveCertAlert(ctx context.Context, config *EffectiveAlertConfig, agent *models.Agent, monitor *protocol.MonitorData, certDaysLeft float64) {
+	stateKey := fmt.Sprintf("%s:%s:cert:%s", agent.ID, config.ConfigID, monitor.MonitorId)
 
 	state, err := s.AlertStateRepo.GetAlertState(ctx, stateKey)
 	if err != nil || !state.IsFiring {
@@ -777,7 +812,7 @@ func (s *AlertService) calculateCertLevel(daysLeft float64) string {
 }
 
 // checkServiceDownAlerts 检查服务下线告警
-func (s *AlertService) checkServiceDownAlerts(ctx context.Context, config *models.AlertConfig, now int64) error {
+func (s *AlertService) checkServiceDownAlerts(ctx context.Context, now int64) error {
 	// 获取所有最新的监控指标
 	monitors, err := s.monitorService.GetAllLatestMonitorMetrics(ctx)
 	if err != nil {
@@ -809,6 +844,12 @@ func (s *AlertService) checkServiceDownAlerts(ctx context.Context, config *model
 		}
 	}
 
+	// 解析各主机生效的告警配置
+	configs, err := s.alertRuleService.ResolveForAgents(ctx, agentIds)
+	if err != nil {
+		return err
+	}
+
 	for _, monitor := range monitors {
 		// 从 map 中获取探针信息
 		agent, exists := agentMap[monitor.AgentId]
@@ -817,7 +858,12 @@ func (s *AlertService) checkServiceDownAlerts(ctx context.Context, config *model
 			continue
 		}
 
-		stateKey := fmt.Sprintf("%s:global:service:%s", agent.ID, monitor.MonitorId)
+		config := configs[monitor.AgentId]
+		if config == nil || !config.Rules.ServiceEnabled {
+			continue
+		}
+
+		stateKey := fmt.Sprintf("%s:%s:service:%s", agent.ID, config.ConfigID, monitor.MonitorId)
 
 		var shouldFire, shouldResolve bool
 
@@ -833,6 +879,7 @@ func (s *AlertService) checkServiceDownAlerts(ctx context.Context, config *model
 		}
 		state.AgentID = agent.ID
 		state.AlertType = "service"
+		state.ConfigID = config.ConfigID
 		state.Duration = config.Rules.ServiceDuration
 		state.LastCheckTime = now
 
@@ -872,7 +919,7 @@ func (s *AlertService) checkServiceDownAlerts(ctx context.Context, config *model
 }
 
 // fireServiceDownAlert 触发服务下线告警
-func (s *AlertService) fireServiceDownAlert(ctx context.Context, config *models.AlertConfig, agent *models.Agent, monitor *protocol.MonitorData, state *models.AlertState, now int64) {
+func (s *AlertService) fireServiceDownAlert(ctx context.Context, config *EffectiveAlertConfig, agent *models.Agent, monitor *protocol.MonitorData, state *models.AlertState, now int64) {
 	s.logger.Info("触发服务下线告警",
 		zap.String("agentId", agent.ID),
 		zap.String("monitorId", monitor.MonitorId),
@@ -894,6 +941,8 @@ func (s *AlertService) fireServiceDownAlert(ctx context.Context, config *models.
 		AgentID:     agent.ID,
 		AgentName:   agent.Name,
 		AlertType:   "service",
+		ConfigID:    config.ConfigID,
+		ConfigName:  config.Name,
 		Message:     message,
 		Threshold:   0,
 		ActualValue: float64(state.Duration),
@@ -920,7 +969,7 @@ func (s *AlertService) fireServiceDownAlert(ctx context.Context, config *models.
 }
 
 // resolveServiceDownAlert 恢复服务下线告警
-func (s *AlertService) resolveServiceDownAlert(ctx context.Context, config *models.AlertConfig, agent *models.Agent, monitor *protocol.MonitorData, state *models.AlertState) {
+func (s *AlertService) resolveServiceDownAlert(ctx context.Context, config *EffectiveAlertConfig, agent *models.Agent, monitor *protocol.MonitorData, state *models.AlertState) {
 	s.logger.Info("服务下线告警恢复",
 		zap.String("agentId", agent.ID),
 		zap.String("monitorId", monitor.MonitorId),
@@ -957,15 +1006,31 @@ func (s *AlertService) resolveServiceDownAlert(ctx context.Context, config *mode
 }
 
 // checkAgentOfflineAlerts 检查探针离线告警
-func (s *AlertService) checkAgentOfflineAlerts(ctx context.Context, config *models.AlertConfig, now int64) error {
+func (s *AlertService) checkAgentOfflineAlerts(ctx context.Context, now int64) error {
 	// 获取所有探针
 	agents, err := s.agentRepo.FindAll(ctx)
 	if err != nil {
 		return err
 	}
 
+	agentIds := make([]string, 0, len(agents))
 	for _, agent := range agents {
-		stateKey := fmt.Sprintf("%s:global:agent_offline:%s", agent.ID, agent.ID)
+		agentIds = append(agentIds, agent.ID)
+	}
+
+	// 解析各探针生效的告警配置
+	configs, err := s.alertRuleService.ResolveForAgents(ctx, agentIds)
+	if err != nil {
+		return err
+	}
+
+	for _, agent := range agents {
+		config := configs[agent.ID]
+		if config == nil || !config.Rules.AgentOfflineEnabled {
+			continue
+		}
+
+		stateKey := fmt.Sprintf("%s:%s:agent_offline:%s", agent.ID, config.ConfigID, agent.ID)
 
 		// 防止时钟回拨导致负数
 		offlineSeconds := int64(0)
@@ -986,6 +1051,7 @@ func (s *AlertService) checkAgentOfflineAlerts(ctx context.Context, config *mode
 
 		state.AgentID = agent.ID
 		state.AlertType = "agent_offline"
+		state.ConfigID = config.ConfigID
 		state.Duration = config.Rules.AgentOfflineDuration
 		state.Threshold = float64(config.Rules.AgentOfflineDuration)
 		state.Value = float64(offlineSeconds)
@@ -1023,7 +1089,7 @@ func (s *AlertService) checkAgentOfflineAlerts(ctx context.Context, config *mode
 }
 
 // fireAgentOfflineAlert 触发探针离线告警
-func (s *AlertService) fireAgentOfflineAlert(ctx context.Context, config *models.AlertConfig, agent *models.Agent, state *models.AlertState, offlineSeconds int64, now int64) {
+func (s *AlertService) fireAgentOfflineAlert(ctx context.Context, config *EffectiveAlertConfig, agent *models.Agent, state *models.AlertState, offlineSeconds int64, now int64) {
 	s.logger.Info("触发探针离线告警",
 		zap.String("agentId", agent.ID),
 		zap.String("agentName", agent.Name),
@@ -1036,6 +1102,8 @@ func (s *AlertService) fireAgentOfflineAlert(ctx context.Context, config *models
 		AgentID:     agent.ID,
 		AgentName:   agent.Name,
 		AlertType:   "agent_offline",
+		ConfigID:    config.ConfigID,
+		ConfigName:  config.Name,
 		Message:     fmt.Sprintf("探针 %s 已离线%d秒，超过阈值%d秒", agent.Name, offlineSeconds, state.Duration),
 		Threshold:   float64(state.Duration),
 		ActualValue: float64(offlineSeconds),
@@ -1062,7 +1130,7 @@ func (s *AlertService) fireAgentOfflineAlert(ctx context.Context, config *models
 }
 
 // resolveAgentOfflineAlert 恢复探针离线告警
-func (s *AlertService) resolveAgentOfflineAlert(ctx context.Context, config *models.AlertConfig, agent *models.Agent, state *models.AlertState) {
+func (s *AlertService) resolveAgentOfflineAlert(ctx context.Context, config *EffectiveAlertConfig, agent *models.Agent, state *models.AlertState) {
 	s.logger.Info("探针离线告警恢复",
 		zap.String("agentId", agent.ID),
 		zap.String("agentName", agent.Name),

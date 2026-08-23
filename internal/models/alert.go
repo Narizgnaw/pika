@@ -6,6 +6,8 @@ type AlertRecord struct {
 	AgentID            string  `gorm:"index" json:"agentId"`                         // 探针ID
 	AgentName          string  `json:"agentName"`                                    // 探针名称
 	AlertType          string  `json:"alertType"`                                    // 告警类型: cpu, memory, disk, network
+	ConfigID           string  `gorm:"index;default:global" json:"configId"`         // 命中的告警规则 ID（global = 默认规则）
+	ConfigName         string  `json:"configName"`                                   // 命中的告警规则名称（快照）
 	Message            string  `json:"message"`                                      // 告警消息
 	Threshold          float64 `json:"threshold"`                                    // 告警阈值
 	ActualValue        float64 `json:"actualValue"`                                  // 告警触发时的实际值
@@ -30,6 +32,7 @@ type AlertState struct {
 	ID            string  `gorm:"primaryKey" json:"id"`                  // 状态ID（格式：agentId:configId:alertType）
 	AgentID       string  `gorm:"index" json:"agentId"`                  // 探针ID
 	AlertType     string  `gorm:"index" json:"alertType"`                // 告警类型
+	ConfigID      string  `gorm:"index;default:global" json:"configId"`  // 告警规则 ID（global = 默认规则）
 	Value         float64 `json:"value"`                                 // 当前值
 	Threshold     float64 `json:"threshold"`                             // 阈值
 	StartTime     int64   `json:"startTime"`                             // 开始超过阈值的时间

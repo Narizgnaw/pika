@@ -92,8 +92,8 @@ const AdminLayout = () => {
                 <div className="min-h-screen" style={{paddingTop: HEADER_HEIGHT}}>
                     <main
                         className={isWideCompactPage
-                            ? 'px-4 pt-4 pb-[88px] lg:ml-[248px] lg:px-8 lg:pt-4 lg:pb-10'
-                            : 'px-4 pt-[22px] pb-[88px] lg:ml-[248px] lg:px-8 lg:pt-6 lg:pb-10'}
+                            ? 'px-4 pt-4 pb-[88px] lg:ml-[240px] lg:px-8 lg:pt-4 lg:pb-10'
+                            : 'px-4 pt-[22px] pb-[88px] lg:ml-[240px] lg:px-8 lg:pt-6 lg:pb-10'}
                         style={{minHeight: `calc(100vh - ${HEADER_HEIGHT}px)`}}
                     >
                         <div className={isWideCompactPage ? 'w-full' : 'mx-auto w-full max-w-[1320px]'}>

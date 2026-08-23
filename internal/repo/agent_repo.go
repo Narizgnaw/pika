@@ -251,6 +251,38 @@ func (r *AgentRepo) GetAllTags(ctx context.Context) ([]string, error) {
 	return tags, nil
 }
 
+// FindIDsByTags 查询拥有任意一个指定标签的探针 ID 列表（在应用层过滤，标签存储为 JSON 列）
+func (r *AgentRepo) FindIDsByTags(ctx context.Context, tags []string) ([]string, error) {
+	if len(tags) == 0 {
+		return nil, nil
+	}
+
+	var agents []models.Agent
+	if err := r.db.WithContext(ctx).
+		Select("id", "tags").
+		Find(&agents).Error; err != nil {
+		return nil, err
+	}
+
+	tagSet := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		if tag != "" {
+			tagSet[tag] = struct{}{}
+		}
+	}
+
+	ids := make([]string, 0)
+	for _, agent := range agents {
+		for _, tag := range agent.Tags {
+			if _, ok := tagSet[tag]; ok {
+				ids = append(ids, agent.ID)
+				break
+			}
+		}
+	}
+	return ids, nil
+}
+
 // FindAgentsWithTrafficReset 查询配置了流量自动重置的探针
 func (r *AgentRepo) FindAgentsWithTrafficReset(ctx context.Context) ([]models.Agent, error) {
 	var allAgents []models.Agent

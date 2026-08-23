@@ -9,6 +9,7 @@ import ThemeSettings from './ThemeSettings';
 import {PageHeader} from '@/components/PageHeader';
 import {PagePanel} from '@/components/PagePanel';
 import {useSearchParams} from 'react-router-dom';
+import {cn} from '@/lib/utils';
 
 // 默认 IPv4 API 列表
 export const defaultIPv4APIs = [
@@ -48,12 +49,6 @@ const settingsTabs: SettingsTab[] = [
         content: <ThemeSettings/>,
     },
     {
-        key: 'channels',
-        label: '通知渠道',
-        icon: MessageSquare,
-        content: <NotificationChannels/>,
-    },
-    {
         key: 'public-ip',
         label: '公网 IP 采集',
         icon: Wifi,
@@ -63,6 +58,12 @@ const settingsTabs: SettingsTab[] = [
                 defaultIPv6APIs={defaultIPv6APIs}
             />
         ),
+    },
+    {
+        key: 'channels',
+        label: '通知渠道',
+        icon: MessageSquare,
+        content: <NotificationChannels/>,
     },
     {
         key: 'alert',
@@ -84,9 +85,9 @@ const Settings = () => {
         <div className="flex min-w-0 flex-col gap-6">
             <PageHeader title="系统设置"/>
 
-            <div className="grid grid-cols-[208px_minmax(0,1fr)] items-start gap-6 max-md:block">
+            <div className="grid grid-cols-[200px_minmax(0,1fr)] items-start gap-6 max-md:block">
                 <nav
-                    className="flex flex-col gap-1 lg:sticky lg:top-[76px] max-md:mb-2 max-md:flex-row max-md:overflow-x-auto max-md:pb-1.5"
+                    className="flex flex-col gap-1 rounded-xl bg-[#f5f6f8] p-1.5 lg:sticky lg:top-[76px] dark:bg-[#1c2028] max-md:mb-2 max-md:flex-row max-md:overflow-x-auto"
                     aria-label="设置分类"
                 >
                     {settingsTabs.map((tab) => {
@@ -96,16 +97,17 @@ const Settings = () => {
                             <button
                                 key={tab.key}
                                 type="button"
-                                className={active
-                                    ? 'flex min-h-10 w-full cursor-pointer items-center rounded-[7px] border-0 bg-[#eaf2ff] px-2.5 py-2 text-left text-[13px] font-semibold text-[#145dcc] dark:bg-[#1677ff]/15 dark:text-[#75adff] max-md:w-auto max-md:shrink-0 max-md:whitespace-nowrap'
-                                    : 'flex min-h-10 w-full cursor-pointer items-center rounded-[7px] border-0 bg-transparent px-2.5 py-2 text-left text-[13px] text-[#646a73] hover:bg-[#f5f6f8] hover:text-[#1f2329] dark:text-[#9ba1ab] dark:hover:bg-[#20242c] dark:hover:text-[#e6e8ec] max-md:w-auto max-md:shrink-0 max-md:whitespace-nowrap'}
+                                className={cn(
+                                    'flex min-h-10 w-full cursor-pointer items-center gap-2 rounded-[10px] border-0 px-2.5 py-2 text-left text-[13px] transition-colors max-md:w-auto max-md:shrink-0 max-md:whitespace-nowrap',
+                                    active
+                                        ? 'bg-[#eaf2ff] font-semibold text-[#145dcc] dark:bg-[#1677ff]/20 dark:text-[#75adff]'
+                                        : 'bg-transparent font-medium text-[#1f2329] hover:bg-[#e8ebf0] dark:text-[#e6e8ec] dark:hover:bg-[#272b33]',
+                                )}
                                 onClick={() => setSearchParams({tab: tab.key})}
                                 aria-current={active ? 'page' : undefined}
                             >
-                                <span className="flex min-w-0 items-center gap-2">
-                                    <Icon size={16} className="shrink-0"/>
-                                    <span className="truncate">{tab.label}</span>
-                                </span>
+                                <Icon size={16} className="shrink-0"/>
+                                <span className="truncate">{tab.label}</span>
                             </button>
                         );
                     })}

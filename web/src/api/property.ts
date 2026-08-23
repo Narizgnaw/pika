@@ -94,10 +94,12 @@ export interface SystemConfig {
 export interface PublicIPConfig {
     enabled: boolean;
     intervalSeconds: number;
-    ipv4Scope: 'all' | 'custom';
+    ipv4Scope: 'all' | 'agents' | 'tags' | 'custom'; // custom 为历史取值，等同 agents
     ipv4AgentIds: string[];
-    ipv6Scope: 'all' | 'custom';
+    ipv4Tags: string[];
+    ipv6Scope: 'all' | 'agents' | 'tags' | 'custom';
     ipv6AgentIds: string[];
+    ipv6Tags: string[];
     ipv4Enabled: boolean;
     ipv6Enabled: boolean;
     ipv4Apis: string[];
@@ -125,8 +127,8 @@ export const savePublicIPConfig = async (config: PublicIPConfig): Promise<void> 
 };
 
 // ==================== 告警配置 ====================
-
-const PROPERTY_ID_ALERT_CONFIG = 'alert_config';
+// 告警行为已完全由告警规则（/admin/alert-rules）驱动，全局告警配置不再对外暴露读写接口。
+// AlertRules 类型供告警规则使用。
 
 // 告警规则
 export interface AlertRules {
@@ -149,30 +151,6 @@ export interface AlertRules {
     agentOfflineEnabled: boolean;   // 探针离线告警开关
     agentOfflineDuration: number;   // 探针离线持续时间（秒）
 }
-
-export interface AlertNotifications {
-    trafficEnabled: boolean;         // 流量告警通知
-    sshLoginSuccessEnabled: boolean; // SSH 登录成功通知
-    tamperEventEnabled: boolean;     // 防篡改事件通知
-}
-
-// 全局告警配置
-export interface AlertConfig {
-    enabled: boolean;  // 全局告警开关
-    maskIP: boolean;   // 是否在通知中打码 IP 地址
-    rules: AlertRules;
-    notifications: AlertNotifications;
-}
-
-// 获取告警配置
-export const getAlertConfig = async (): Promise<AlertConfig> => {
-    return getProperty<AlertConfig>(PROPERTY_ID_ALERT_CONFIG);
-};
-
-// 保存告警配置
-export const saveAlertConfig = async (config: AlertConfig): Promise<void> => {
-    return saveProperty(PROPERTY_ID_ALERT_CONFIG, '告警配置', config);
-};
 
 // ==================== 探针安装配置 ====================
 

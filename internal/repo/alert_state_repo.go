@@ -46,6 +46,13 @@ func (r *AlertStateRepo) DeleteAlertStatesByConfigID(ctx context.Context, config
 	return r.db.WithContext(ctx).Where("config_id = ?", configID).Delete(&models.AlertState{}).Error
 }
 
+// FindStatesByConfigID 查询指定告警规则相关的所有告警状态
+func (r *AlertStateRepo) FindStatesByConfigID(ctx context.Context, configID string) ([]models.AlertState, error) {
+	var states []models.AlertState
+	err := r.db.WithContext(ctx).Where("config_id = ?", configID).Find(&states).Error
+	return states, err
+}
+
 // LoadAllStates 加载所有告警状态
 func (r *AlertStateRepo) LoadAllStates(ctx context.Context) ([]models.AlertState, error) {
 	var states []models.AlertState

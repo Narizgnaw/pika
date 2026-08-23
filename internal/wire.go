@@ -29,6 +29,7 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 		service.NewGitHubOAuthService,
 		service.NewApiKeyService,
 		service.NewAlertService,
+		service.NewAlertRuleService,
 		service.NewPropertyService,
 		service.NewNotificationService,
 		service.NewMonitorService,
@@ -48,6 +49,7 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 		// Handlers
 		handler.NewAgentHandler,
 		handler.NewAlertHandler,
+		handler.NewAlertRuleHandler,
 		handler.NewPropertyHandler,
 		handler.NewMonitorHandler,
 		handler.NewApiKeyHandler,
@@ -71,6 +73,7 @@ type AppComponents struct {
 	AgentHandler       *handler.AgentHandler
 	ApiKeyHandler      *handler.ApiKeyHandler
 	AlertHandler       *handler.AlertHandler
+	AlertRuleHandler   *handler.AlertRuleHandler
 	PropertyHandler    *handler.PropertyHandler
 	MonitorHandler     *handler.MonitorHandler
 	TamperHandler      *handler.TamperHandler
@@ -80,18 +83,19 @@ type AppComponents struct {
 	ThemeHandler       *handler.ThemeHandler
 	WebHandler         *handler.WebHandler
 
-	AgentService    *service.AgentService
-	TrafficService  *service.TrafficService
-	MetricService   *service.MetricService
-	AlertService    *service.AlertService
-	PropertyService *service.PropertyService
-	MonitorService  *service.MonitorService
-	ApiKeyService   *service.ApiKeyService
-	TamperService   *service.TamperService
-	DDNSService     *service.DDNSService
-	SSHLoginService *service.SSHLoginService
-	PublicIPService *service.PublicIPService
-	ThemeService    *service.ThemeService
+	AgentService     *service.AgentService
+	TrafficService   *service.TrafficService
+	MetricService    *service.MetricService
+	AlertService     *service.AlertService
+	AlertRuleService *service.AlertRuleService
+	PropertyService  *service.PropertyService
+	MonitorService   *service.MonitorService
+	ApiKeyService    *service.ApiKeyService
+	TamperService    *service.TamperService
+	DDNSService      *service.DDNSService
+	SSHLoginService  *service.SSHLoginService
+	PublicIPService  *service.PublicIPService
+	ThemeService     *service.ThemeService
 
 	WSManager *websocket.Manager
 	VMClient  *vmclient.VMClient

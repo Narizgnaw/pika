@@ -7,20 +7,24 @@ import (
 
 	"github.com/pika-monitor/pika/internal/models"
 	"github.com/pika-monitor/pika/internal/protocol"
+	"github.com/pika-monitor/pika/internal/repo"
 	"github.com/pika-monitor/pika/internal/websocket"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 type PublicIPService struct {
 	logger          *zap.Logger
 	propertyService *PropertyService
+	agentRepo       *repo.AgentRepo
 	wsManager       *websocket.Manager
 }
 
-func NewPublicIPService(logger *zap.Logger, propertyService *PropertyService, wsManager *websocket.Manager) *PublicIPService {
+func NewPublicIPService(logger *zap.Logger, db *gorm.DB, propertyService *PropertyService, wsManager *websocket.Manager) *PublicIPService {
 	return &PublicIPService{
 		logger:          logger,
 		propertyService: propertyService,
+		agentRepo:       repo.NewAgentRepo(db),
 		wsManager:       wsManager,
 	}
 }
@@ -75,12 +79,21 @@ func (s *PublicIPService) sendConfigToOnlineAgents(config *models.PublicIPConfig
 		return
 	}
 
+	// 批量查询探针标签，用于按标签匹配采集范围
+	agentTagMap := make(map[string][]string, len(agentIDs))
+	if agents, err := s.agentRepo.FindByIdIn(context.Background(), agentIDs); err == nil {
+		for _, agent := range agents {
+			agentTagMap[agent.ID] = agent.Tags
+		}
+	}
+
 	for _, agentID := range agentIDs {
 		if agentID == "" {
 			continue
 		}
-		ipv4Enabled := config.IsIPv4Target(agentID)
-		ipv6Enabled := config.IsIPv6Target(agentID)
+		agentTags := agentTagMap[agentID]
+		ipv4Enabled := config.IsIPv4Target(agentID, agentTags)
+		ipv6Enabled := config.IsIPv6Target(agentID, agentTags)
 		if !ipv4Enabled && !ipv6Enabled {
 			continue
 		}

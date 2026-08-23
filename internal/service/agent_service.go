@@ -21,6 +21,7 @@ type AgentService struct {
 	logger *zap.Logger
 	*orz.Service
 	AgentRepo         *repo.AgentRepo
+	MonitorRepo       *repo.MonitorRepo
 	TamperEventRepo   *repo.TamperEventRepo
 	SSHLoginEventRepo *repo.SSHLoginEventRepo
 	apiKeyService     *ApiKeyService
@@ -33,6 +34,7 @@ func NewAgentService(logger *zap.Logger, db *gorm.DB, apiKeyService *ApiKeyServi
 		logger:            logger,
 		Service:           orz.NewService(db),
 		AgentRepo:         repo.NewAgentRepo(db),
+		MonitorRepo:       repo.NewMonitorRepo(db),
 		TamperEventRepo:   repo.NewTamperEventRepo(db),
 		SSHLoginEventRepo: repo.NewSSHLoginEventRepo(db),
 		apiKeyService:     apiKeyService,
@@ -494,8 +496,19 @@ func (s *AgentService) BatchUpdateTags(ctx context.Context, agentIDs []string, t
 		return err
 	}
 
+	// 收集受影响的标签（变更前的标签 + 本次操作涉及的标签），用于事后清理监控缓存
+	affectedTags := make(map[string]struct{})
+	for _, tag := range tags {
+		affectedTags[tag] = struct{}{}
+	}
+	for _, agent := range agents {
+		for _, tag := range agent.Tags {
+			affectedTags[tag] = struct{}{}
+		}
+	}
+
 	// 在事务中执行批量更新
-	return s.Transaction(ctx, func(ctx context.Context) error {
+	if err := s.Transaction(ctx, func(ctx context.Context) error {
 		for _, agent := range agents {
 			// 根据操作类型处理标签
 			var newTags []string
@@ -544,7 +557,40 @@ func (s *AgentService) BatchUpdateTags(ctx context.Context, agentIDs []string, t
 				zap.Strings("tags", newTags))
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	// 标签变更后，清理引用了受影响标签的监控任务缓存（避免已移出探针的数据残留）
+	s.cleanupMonitorCacheForTags(ctx, affectedTags)
+
+	return nil
+}
+
+// cleanupMonitorCacheForTags 清理引用了指定标签的监控任务缓存（失败仅记录日志，不影响主流程）
+func (s *AgentService) cleanupMonitorCacheForTags(ctx context.Context, tags map[string]struct{}) {
+	if len(tags) == 0 || s.metricService == nil {
+		return
+	}
+
+	tagList := make([]string, 0, len(tags))
+	for tag := range tags {
+		if tag != "" {
+			tagList = append(tagList, tag)
+		}
+	}
+
+	monitors, err := s.MonitorRepo.FindByAnyTags(ctx, tagList)
+	if err != nil {
+		s.logger.Warn("查询引用标签的监控任务失败", zap.Strings("tags", tagList), zap.Error(err))
+		return
+	}
+
+	for _, monitor := range monitors {
+		if err := s.metricService.CleanMonitorCache(ctx, monitor.ID); err != nil {
+			s.logger.Warn("清理监控缓存失败", zap.String("monitorID", monitor.ID), zap.Error(err))
+		}
+	}
 }
 
 // BatchUpdateVisibility 批量更新探针可见性

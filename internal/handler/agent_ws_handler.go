@@ -319,8 +319,14 @@ func (h *AgentHandler) sendPublicIPConfig(conn *websocket.Conn, agentID string) 
 		return nil
 	}
 
-	ipv4Enabled := config.IsIPv4Target(agentID)
-	ipv6Enabled := config.IsIPv6Target(agentID)
+	// 查询探针标签，用于按标签匹配采集范围
+	var agentTags []string
+	if agent, err := h.agentService.AgentRepo.FindById(context.Background(), agentID); err == nil {
+		agentTags = agent.Tags
+	}
+
+	ipv4Enabled := config.IsIPv4Target(agentID, agentTags)
+	ipv6Enabled := config.IsIPv6Target(agentID, agentTags)
 	if !ipv4Enabled && !ipv6Enabled {
 		return nil
 	}

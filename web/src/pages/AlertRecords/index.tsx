@@ -164,6 +164,18 @@ const AlertRecordList = () => {
             render: (_, record) => alertTypeMap[record.alertType] || record.alertType,
         },
         {
+            title: '规则',
+            dataIndex: 'configName',
+            width: 130,
+            ellipsis: true,
+            render: (_, record) => {
+                if (record.configName) {
+                    return record.configName;
+                }
+                return (!record.configId || record.configId === 'global') ? '默认规则' : record.configId;
+            },
+        },
+        {
             title: '告警消息',
             dataIndex: 'message',
             width: 320,

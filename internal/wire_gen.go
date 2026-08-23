@@ -33,7 +33,8 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 		return nil, err
 	}
 	notifier := service.NewNotifier(logger)
-	notificationService := service.NewNotificationService(logger, propertyService, notifier)
+	alertRuleService := service.NewAlertRuleService(logger, db, propertyService)
+	notificationService := service.NewNotificationService(logger, db, propertyService, alertRuleService, notifier)
 	trafficService := service.NewTrafficService(logger, db, notificationService)
 	vmClient := provideVMClient(cfg, logger)
 	metricService := service.NewMetricService(logger, db, propertyService, trafficService, vmClient)
@@ -47,11 +48,12 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 	tamperService := service.NewTamperService(logger, db, manager, notificationService)
 	ddnsService := service.NewDDNSService(logger, db, propertyService, manager)
 	sshLoginService := service.NewSSHLoginService(logger, db, manager, geoIPService, notificationService)
-	publicIPService := service.NewPublicIPService(logger, propertyService, manager)
+	publicIPService := service.NewPublicIPService(logger, db, propertyService, manager)
 	agentHandler := handler.NewAgentHandler(logger, agentService, trafficService, metricService, monitorService, tamperService, ddnsService, sshLoginService, apiKeyService, propertyService, manager)
 	apiKeyHandler := handler.NewApiKeyHandler(logger, apiKeyService)
-	alertService := service.NewAlertService(logger, db, propertyService, monitorService, notifier)
+	alertService := service.NewAlertService(logger, db, propertyService, alertRuleService, monitorService, notifier)
 	alertHandler := handler.NewAlertHandler(logger, alertService)
+	alertRuleHandler := handler.NewAlertRuleHandler(logger, alertRuleService, agentService)
 	propertyHandler := handler.NewPropertyHandler(logger, propertyService, notifier)
 	monitorHandler := handler.NewMonitorHandler(logger, monitorService, metricService, agentService)
 	tamperHandler := handler.NewTamperHandler(logger, tamperService)
@@ -65,6 +67,7 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 		AgentHandler:       agentHandler,
 		ApiKeyHandler:      apiKeyHandler,
 		AlertHandler:       alertHandler,
+		AlertRuleHandler:   alertRuleHandler,
 		PropertyHandler:    propertyHandler,
 		MonitorHandler:     monitorHandler,
 		TamperHandler:      tamperHandler,
@@ -77,6 +80,7 @@ func InitializeApp(logger *zap.Logger, db *gorm.DB, cfg *config.AppConfig) (*App
 		TrafficService:     trafficService,
 		MetricService:      metricService,
 		AlertService:       alertService,
+		AlertRuleService:   alertRuleService,
 		PropertyService:    propertyService,
 		MonitorService:     monitorService,
 		ApiKeyService:      apiKeyService,
@@ -99,6 +103,7 @@ type AppComponents struct {
 	AgentHandler       *handler.AgentHandler
 	ApiKeyHandler      *handler.ApiKeyHandler
 	AlertHandler       *handler.AlertHandler
+	AlertRuleHandler   *handler.AlertRuleHandler
 	PropertyHandler    *handler.PropertyHandler
 	MonitorHandler     *handler.MonitorHandler
 	TamperHandler      *handler.TamperHandler
@@ -108,18 +113,19 @@ type AppComponents struct {
 	ThemeHandler       *handler.ThemeHandler
 	WebHandler         *handler.WebHandler
 
-	AgentService    *service.AgentService
-	TrafficService  *service.TrafficService
-	MetricService   *service.MetricService
-	AlertService    *service.AlertService
-	PropertyService *service.PropertyService
-	MonitorService  *service.MonitorService
-	ApiKeyService   *service.ApiKeyService
-	TamperService   *service.TamperService
-	DDNSService     *service.DDNSService
-	SSHLoginService *service.SSHLoginService
-	PublicIPService *service.PublicIPService
-	ThemeService    *service.ThemeService
+	AgentService     *service.AgentService
+	TrafficService   *service.TrafficService
+	MetricService    *service.MetricService
+	AlertService     *service.AlertService
+	AlertRuleService *service.AlertRuleService
+	PropertyService  *service.PropertyService
+	MonitorService   *service.MonitorService
+	ApiKeyService    *service.ApiKeyService
+	TamperService    *service.TamperService
+	DDNSService      *service.DDNSService
+	SSHLoginService  *service.SSHLoginService
+	PublicIPService  *service.PublicIPService
+	ThemeService     *service.ThemeService
 
 	WSManager *websocket.Manager
 	VMClient  *vmclient.VMClient

@@ -9,7 +9,7 @@ export const AdminSider = () => {
     const {data: runtime} = useRuntimeConfig();
 
     return (
-        <aside className="fixed inset-y-0 left-0 z-[320] hidden w-[248px] overflow-hidden bg-[#18202d] text-white dark:bg-[#111827] lg:block">
+        <aside className="fixed inset-y-0 left-0 z-[320] hidden w-[240px] overflow-hidden bg-[#18202d] text-white dark:bg-[#111827] lg:block">
             <div className="flex h-full flex-col">
                 <div className="flex h-[60px] shrink-0 items-center gap-[11px] border-b border-white/[0.09] px-4">
                     <div className="grid size-9 shrink-0 place-items-center">

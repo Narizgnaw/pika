@@ -79,6 +79,10 @@ func setup(app *orz.App) error {
 		app.Logger().Error("初始化默认属性配置失败", zap.Error(err))
 		// 不返回错误，继续启动
 	}
+	// 不存在任何告警规则时，从全局告警配置生成一条默认规则（保证升级/新装后告警行为不变）
+	if err := components.AlertRuleService.SeedDefaultRule(ctx); err != nil {
+		app.Logger().Warn("初始化默认告警规则失败", zap.Error(err))
+	}
 	// 初始化探针的状态全部为离线
 	if err := components.AgentService.InitStatus(ctx); err != nil {
 		app.Logger().Error("初始化探针状态失败", zap.Error(err))
@@ -240,6 +244,14 @@ func setupApi(app *orz.App, components *AppComponents) error {
 		adminApi.GET("/alert-records", components.AlertHandler.ListAlertRecords)
 		adminApi.DELETE("/alert-records", components.AlertHandler.ClearAlertRecords)
 
+		// 告警规则管理
+		adminApi.GET("/alert-rules", components.AlertRuleHandler.List)
+		adminApi.POST("/alert-rules", components.AlertRuleHandler.Create)
+		adminApi.PUT("/alert-rules/:id", components.AlertRuleHandler.Update)
+		adminApi.DELETE("/alert-rules/:id", components.AlertRuleHandler.Delete)
+		adminApi.POST("/alert-rules/:id/enable", components.AlertRuleHandler.Enable)
+		adminApi.POST("/alert-rules/:id/disable", components.AlertRuleHandler.Disable)
+
 		// 服务监控配置
 		adminApi.GET("/monitors", components.MonitorHandler.List)
 		adminApi.POST("/monitors", components.MonitorHandler.Create)
@@ -294,6 +306,7 @@ func autoMigrate(database *gorm.DB) error {
 		&models.Property{},      // 系统属性
 		&models.AlertRecord{},   // 告警记录
 		&models.AlertState{},    // 告警状态
+		&models.AlertRule{},     // 告警规则
 		&models.MonitorTask{},   // 服务监控
 		&models.TamperEvent{},   // 防篡改事件
 		&models.DDNSConfig{},    // DDNS 配置

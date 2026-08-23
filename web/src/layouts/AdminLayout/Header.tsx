@@ -47,7 +47,7 @@ export const AdminHeader = ({userInfo, appliedTheme, themeButtonRef, onToggleThe
     ];
 
     return (
-        <header className="fixed inset-x-0 top-0 z-[300] h-[60px] border-b border-[#e8ebf0] bg-white/95 backdrop-blur-xl dark:border-[#272b33] dark:bg-[#0f1115]/95 lg:left-[248px]">
+        <header className="fixed inset-x-0 top-0 z-[300] h-[60px] border-b border-[#e8ebf0] bg-white/95 backdrop-blur-xl dark:border-[#272b33] dark:bg-[#0f1115]/95 lg:left-[240px]">
             <div className="flex h-full items-center gap-4 px-4 lg:px-8">
                 <div className="ml-[46px] flex min-w-0 items-center gap-2.5 lg:hidden">
                     <div className="grid size-[38px] shrink-0 place-items-center overflow-hidden">

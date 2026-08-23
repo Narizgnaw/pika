@@ -1,174 +1,197 @@
-import { useEffect } from 'react';
-import { App, Button, Form, InputNumber, Switch } from 'antd';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AlertConfig } from '@/api/property';
-import { getAlertConfig, saveAlertConfig } from '@/api/property';
-import { getErrorMessage } from '@/lib/utils';
-import {SettingsActions, SettingsSection, SettingsSwitchRow} from './SettingsSection';
+import {useState} from 'react';
+import {App, Button, Switch, Tag, Tooltip} from 'antd';
+import {Pencil, Plus, Trash2} from 'lucide-react';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {listAlertRules, deleteAlertRule, enableAlertRule, disableAlertRule} from '@/api/alertRule.ts';
+import type {AlertRule} from '@/types';
+import {getErrorMessage} from '@/lib/utils';
+import {SettingsSection} from './SettingsSection';
+import AlertRuleModal from './AlertRuleModal';
 
-interface RuleDefinition {
-    key: string;
-    name: string;
-    threshold?: {
-        label: string;
-        min: number;
-        max: number;
-        tooltip?: string;
-    };
-    duration?: {
-        tooltip?: string;
-    };
-}
+// 通知渠道类型中文名（与通知渠道设置页保持一致）
+const CHANNEL_TYPE_NAMES: Record<string, string> = {
+    dingtalk: '钉钉',
+    wecom: '企业微信',
+    wecomApp: '企业微信应用',
+    feishu: '飞书',
+    telegram: 'Telegram',
+    email: '邮件',
+    webhook: '自定义 Webhook',
+};
 
-const RULES: RuleDefinition[] = [
-    { key: 'cpu', name: 'CPU 使用率', threshold: { label: '阈值 (%)', min: 0, max: 100 }, duration: {} },
-    { key: 'memory', name: '内存使用率', threshold: { label: '阈值 (%)', min: 0, max: 100 }, duration: {} },
-    { key: 'disk', name: '磁盘使用率', threshold: { label: '阈值 (%)', min: 0, max: 100 }, duration: {} },
-    { key: 'network', name: '网速', threshold: { label: '阈值 (MB/s)', min: 0, max: 10000 }, duration: {} },
-    {
-        key: 'cert',
-        name: 'HTTPS 证书',
-        threshold: { label: '剩余天数阈值（天）', min: 1, max: 365, tooltip: '当证书剩余天数低于此阈值时触发告警' },
-    },
-    { key: 'service', name: '服务下线', duration: { tooltip: '服务持续离线多久后触发告警' } },
-    { key: 'agentOffline', name: '探针离线', duration: { tooltip: '探针持续离线多久后触发告警' } },
-];
+const TARGET_TYPE_NAMES: Record<string, string> = {
+    all: '全部主机',
+    agents: '按主机',
+    tags: '按标签',
+};
 
 const AlertSettings = () => {
-    const [form] = Form.useForm();
-    const { message: messageApi } = App.useApp();
+    const {message: messageApi, modal} = App.useApp();
     const queryClient = useQueryClient();
+    const [ruleModalOpen, setRuleModalOpen] = useState(false);
+    const [editingRule, setEditingRule] = useState<AlertRule | undefined>(undefined);
 
-    // 获取全局告警配置
-    const { data: configData, isLoading: configLoading } = useQuery({
-        queryKey: ['alertConfig'],
-        queryFn: getAlertConfig,
+    // 告警规则列表
+    const {data: rulePage} = useQuery({
+        queryKey: ['admin', 'alert-rules'],
+        queryFn: () => listAlertRules(),
     });
 
-    // 设置表单默认值
-    useEffect(() => {
-        if (configData) {
-            form.setFieldsValue(configData);
-        }
-    }, [configData, configLoading, form]);
-
-    // 保存 mutation
-    const saveMutation = useMutation({
-        mutationFn: (config: AlertConfig) => saveAlertConfig(config),
+    const deleteRuleMutation = useMutation({
+        mutationFn: (id: string) => deleteAlertRule(id),
         onSuccess: () => {
-            messageApi.success('告警配置保存成功');
-            queryClient.invalidateQueries({ queryKey: ['alertConfig'] });
+            messageApi.success('规则删除成功');
+            queryClient.invalidateQueries({queryKey: ['admin', 'alert-rules']});
         },
         onError: (error: unknown) => {
-            messageApi.error(getErrorMessage(error, '保存配置失败'));
+            messageApi.error(getErrorMessage(error, '删除失败'));
         },
     });
 
-    const handleSubmit = async () => {
-        const values = await form.validateFields();
-        saveMutation.mutate(values as AlertConfig);
+    const toggleRuleMutation = useMutation({
+        mutationFn: (rule: AlertRule) => (rule.enabled ? disableAlertRule(rule.id) : enableAlertRule(rule.id)),
+        onSuccess: () => {
+            queryClient.invalidateQueries({queryKey: ['admin', 'alert-rules']});
+        },
+        onError: (error: unknown) => {
+            messageApi.error(getErrorMessage(error, '切换启用状态失败'));
+        },
+    });
+
+    const handleDeleteRule = (rule: AlertRule) => {
+        modal.confirm({
+            title: '确认删除',
+            content: `确定要删除告警规则「${rule.name}」吗？其中的主机将不再产生告警（除非命中其他规则）。`,
+            okText: '删除',
+            okType: 'danger',
+            cancelText: '取消',
+            onOk: async () => {
+                await deleteRuleMutation.mutateAsync(rule.id);
+            },
+        });
+    };
+
+    const rules = rulePage?.data?.items || [];
+
+    const renderRuleTarget = (rule: AlertRule) => {
+        const typeName = TARGET_TYPE_NAMES[rule.targetType] || rule.targetType;
+        if (rule.targetType === 'agents') {
+            return (
+                <Tooltip title={rule.agentNames?.join('、') || ''}>
+                    <span>{typeName} · {rule.agentIds?.length || 0} 台</span>
+                </Tooltip>
+            );
+        }
+        if (rule.targetType === 'tags') {
+            return (
+                <span>
+                    {typeName} · {(rule.tags || []).map((tag) => (
+                        <Tag key={tag} color="green" style={{marginInlineEnd: 4}}>{tag}</Tag>
+                    ))}
+                </span>
+            );
+        }
+        return <span>{typeName}</span>;
+    };
+
+    const renderRuleChannels = (rule: AlertRule) => {
+        if (!rule.channels || rule.channels.length === 0) {
+            return <Tag style={{margin: 0}}>全部渠道</Tag>;
+        }
+        return (
+            <span className="flex flex-wrap items-center gap-1">
+                {rule.channels.map((type) => (
+                    <Tag key={type} color="blue" style={{margin: 0}}>
+                        {CHANNEL_TYPE_NAMES[type] || type}
+                    </Tag>
+                ))}
+            </span>
+        );
     };
 
     return (
         <div>
-            <Form form={form} layout="vertical" onFinish={handleSubmit}>
-                <SettingsSection title="基本信息" divided={false}>
-                    <SettingsSwitchRow
-                        title="启用告警"
-                        description="总开关，关闭后不再产生和发送任何告警通知。"
+            <SettingsSection
+                title="告警规则"
+                divided={false}
+                description="主机按优先级（数字越小越优先）命中第一条启用的规则；未命中任何规则的主机不产生告警与通知。每条规则可配置阈值、事件通知开关与推送渠道。"
+                extra={(
+                    <Button
+                        type="primary"
+                        icon={<Plus size={14}/>}
+                        onClick={() => {
+                            setEditingRule(undefined);
+                            setRuleModalOpen(true);
+                        }}
                     >
-                        <Form.Item noStyle name="enabled" valuePropName="checked">
-                            <Switch checkedChildren="开启" unCheckedChildren="关闭"/>
-                        </Form.Item>
-                    </SettingsSwitchRow>
-                    <SettingsSwitchRow
-                        title="IP 打码"
-                        description="开启后，通知消息中的 IP 地址将显示为 192.168.*.* 格式。"
-                    >
-                        <Form.Item noStyle name="maskIP" valuePropName="checked">
-                            <Switch checkedChildren="开启" unCheckedChildren="关闭"/>
-                        </Form.Item>
-                    </SettingsSwitchRow>
-                </SettingsSection>
-
-                <SettingsSection title="通知开关" description="控制哪些事件会通过通知渠道推送。">
-                    <SettingsSwitchRow title="流量告警通知">
-                        <Form.Item noStyle name={['notifications', 'trafficEnabled']} valuePropName="checked">
-                            <Switch checkedChildren="开启" unCheckedChildren="关闭"/>
-                        </Form.Item>
-                    </SettingsSwitchRow>
-                    <SettingsSwitchRow title="SSH 登录成功通知">
-                        <Form.Item noStyle name={['notifications', 'sshLoginSuccessEnabled']} valuePropName="checked">
-                            <Switch checkedChildren="开启" unCheckedChildren="关闭"/>
-                        </Form.Item>
-                    </SettingsSwitchRow>
-                    <SettingsSwitchRow title="防篡改事件通知">
-                        <Form.Item noStyle name={['notifications', 'tamperEventEnabled']} valuePropName="checked">
-                            <Switch checkedChildren="开启" unCheckedChildren="关闭"/>
-                        </Form.Item>
-                    </SettingsSwitchRow>
-                </SettingsSection>
-
-                <SettingsSection title="告警规则" description="开启规则后，满足阈值条件并持续指定时间才会触发告警。">
-                    <div>
-                        {RULES.map((rule) => (
-                            <Form.Item key={rule.key} noStyle shouldUpdate>
-                                {({ getFieldValue }) => {
-                                    const enabled = getFieldValue(['rules', `${rule.key}Enabled`]);
-                                    return (
-                                        <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-4 border-t border-[#e8ebf0] py-4 first:border-t-0 first:pt-0 dark:border-[#272b33]">
-                                            <div className="flex items-center gap-3">
-                                                <Form.Item
-                                                    noStyle
-                                                    name={['rules', `${rule.key}Enabled`]}
-                                                    valuePropName="checked"
-                                                >
-                                                    <Switch size="small"/>
-                                                </Form.Item>
-                                                <span className="text-[13px] font-medium text-[#1f2329] dark:text-[#e6e8ec]">
-                                                    {rule.name}
-                                                </span>
-                                            </div>
-                                            <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
-                                                {rule.threshold && (
-                                                    <Form.Item
-                                                        label={rule.threshold.label}
-                                                        name={['rules', `${rule.key}Threshold`]}
-                                                        tooltip={rule.threshold.tooltip}
-                                                        style={{ marginBottom: 0 }}
-                                                    >
-                                                        <InputNumber
-                                                            min={rule.threshold.min}
-                                                            max={rule.threshold.max}
-                                                            disabled={!enabled}
-                                                        />
-                                                    </Form.Item>
-                                                )}
-                                                {rule.duration && (
-                                                    <Form.Item
-                                                        label="持续时间（秒）"
-                                                        name={['rules', `${rule.key}Duration`]}
-                                                        tooltip={rule.duration.tooltip}
-                                                        style={{ marginBottom: 0 }}
-                                                    >
-                                                        <InputNumber min={1} max={3600} disabled={!enabled}/>
-                                                    </Form.Item>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                }}
-                            </Form.Item>
+                        新建规则
+                    </Button>
+                )}
+            >
+                {rules.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-[#e8ebf0] py-8 text-center text-sm text-[#98a0ab] dark:border-[#272b33] dark:text-[#7d8590]">
+                        暂无告警规则，所有主机均不会产生告警
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        {rules.map((rule) => (
+                            <div
+                                key={rule.id}
+                                className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-[#e8ebf0] px-3.5 py-3 dark:border-[#272b33]"
+                            >
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-[13px] font-medium text-[#1f2329] dark:text-[#e6e8ec]">
+                                            {rule.name}
+                                        </span>
+                                        <Tag color="gold" style={{margin: 0}}>
+                                            优先级 {rule.priority}
+                                        </Tag>
+                                        {rule.maskIP && <Tag style={{margin: 0}}>IP打码</Tag>}
+                                    </div>
+                                    <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#646a73] dark:text-[#9ba1ab]">
+                                        {renderRuleTarget(rule)}
+                                        {renderRuleChannels(rule)}
+                                    </div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                    <Switch
+                                        size="small"
+                                        checked={rule.enabled}
+                                        loading={toggleRuleMutation.isPending && toggleRuleMutation.variables?.id === rule.id}
+                                        onChange={() => toggleRuleMutation.mutate(rule)}
+                                    />
+                                    <Button
+                                        type="text"
+                                        size="small"
+                                        icon={<Pencil size={14}/>}
+                                        onClick={() => {
+                                            setEditingRule(rule);
+                                            setRuleModalOpen(true);
+                                        }}
+                                        title="编辑"
+                                    />
+                                    <Button
+                                        type="text"
+                                        size="small"
+                                        danger
+                                        icon={<Trash2 size={14}/>}
+                                        onClick={() => handleDeleteRule(rule)}
+                                        title="删除"
+                                    />
+                                </div>
+                            </div>
                         ))}
                     </div>
-                </SettingsSection>
+                )}
+            </SettingsSection>
 
-                <SettingsActions>
-                    <Button type="primary" htmlType="submit" loading={saveMutation.isPending}>
-                        保存配置
-                    </Button>
-                </SettingsActions>
-            </Form>
+            <AlertRuleModal
+                open={ruleModalOpen}
+                rule={editingRule}
+                onCancel={() => setRuleModalOpen(false)}
+                onSuccess={() => setRuleModalOpen(false)}
+            />
         </div>
     );
 };

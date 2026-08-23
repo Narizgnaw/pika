@@ -67,6 +67,7 @@ type MonitorTaskRequest struct {
 	TCPConfig        protocol.TCPMonitorConfig  `json:"tcpConfig,omitempty"`
 	ICMPConfig       protocol.ICMPMonitorConfig `json:"icmpConfig,omitempty"`
 	AgentIds         []string                   `json:"agentIds,omitempty"`
+	Tags             []string                   `json:"tags,omitempty"` // 标签列表，拥有这些标签的探针都会执行此监控
 }
 
 func (s *MonitorService) CreateMonitor(ctx context.Context, req *MonitorTaskRequest) (*models.MonitorTask, error) {
@@ -93,6 +94,7 @@ func (s *MonitorService) CreateMonitor(ctx context.Context, req *MonitorTaskRequ
 		Visibility:       visibility,
 		Interval:         interval,
 		AgentIds:         datatypes.JSONSlice[string](req.AgentIds),
+		Tags:             datatypes.JSONSlice[string](req.Tags),
 		HTTPConfig:       datatypes.NewJSONType(req.HTTPConfig),
 		TCPConfig:        datatypes.NewJSONType(req.TCPConfig),
 		ICMPConfig:       datatypes.NewJSONType(req.ICMPConfig),
@@ -142,6 +144,7 @@ func (s *MonitorService) UpdateMonitor(ctx context.Context, id string, req *Moni
 	task.Interval = interval
 
 	task.AgentIds = req.AgentIds
+	task.Tags = req.Tags
 	task.HTTPConfig = datatypes.NewJSONType(req.HTTPConfig)
 	task.TCPConfig = datatypes.NewJSONType(req.TCPConfig)
 	task.ICMPConfig = datatypes.NewJSONType(req.ICMPConfig)
@@ -276,14 +279,20 @@ func (s *MonitorService) sendMonitorConfigToAgent(agentID string, payload protoc
 
 // SendMonitorTaskToAgents 向指定探针发送单个监控任务（公开方法）
 func (s *MonitorService) SendMonitorTaskToAgents(ctx context.Context, monitor models.MonitorTask) error {
-	// 确定目标探针 ID 列表
+	// 解析目标探针集合（指定探针与标签匹配探针的并集，均未指定时对所有探针生效）
+	targetSet, err := resolveMonitorTargetSet(ctx, s.agentRepo, &monitor)
+	if err != nil {
+		return err
+	}
+
 	var targetAgentIDs []string
-	if len(monitor.AgentIds) == 0 {
-		// 没有指定探针，向所有在线探针发送
+	if targetSet.all {
+		// 没有指定探针和标签，向所有在线探针发送
 		targetAgentIDs = s.wsManager.GetAllClients()
 	} else {
-		// 指定了探针
-		targetAgentIDs = monitor.AgentIds
+		for agentID := range targetSet.ids {
+			targetAgentIDs = append(targetAgentIDs, agentID)
+		}
 	}
 
 	if len(targetAgentIDs) == 0 {

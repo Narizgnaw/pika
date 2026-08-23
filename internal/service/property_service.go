@@ -405,7 +405,6 @@ func (s *PropertyService) InitializeDefaultConfigs(ctx context.Context) error {
 			ID:   PropertyIDAlertConfig,
 			Name: "告警配置",
 			Value: models.AlertConfig{
-				Enabled: true, // 默认启用告警
 				Notifications: models.AlertNotifications{
 					TrafficEnabled:         true,
 					SSHLoginSuccessEnabled: true,

@@ -67,49 +67,61 @@ type SystemConfig struct {
 type PublicIPConfig struct {
 	Enabled         bool     `json:"enabled"`         // 是否启用采集
 	IntervalSeconds int      `json:"intervalSeconds"` // 采集间隔（秒）
-	IPv4Scope       string   `json:"ipv4Scope"`       // IPv4 采集范围: all/custom
-	IPv4AgentIDs    []string `json:"ipv4AgentIds"`    // IPv4 自定义探针列表
-	IPv6Scope       string   `json:"ipv6Scope"`       // IPv6 采集范围: all/custom
-	IPv6AgentIDs    []string `json:"ipv6AgentIds"`    // IPv6 自定义探针列表
+	IPv4Scope       string   `json:"ipv4Scope"`       // IPv4 采集范围: all-全部, agents-按主机, tags-按标签（兼容历史值 custom，等同 agents）
+	IPv4AgentIDs    []string `json:"ipv4AgentIds"`    // IPv4 指定探针列表（scope=agents 时有效）
+	IPv4Tags        []string `json:"ipv4Tags"`        // IPv4 标签列表（scope=tags 时有效）
+	IPv6Scope       string   `json:"ipv6Scope"`       // IPv6 采集范围: all-全部, agents-按主机, tags-按标签（兼容历史值 custom，等同 agents）
+	IPv6AgentIDs    []string `json:"ipv6AgentIds"`    // IPv6 指定探针列表（scope=agents 时有效）
+	IPv6Tags        []string `json:"ipv6Tags"`        // IPv6 标签列表（scope=tags 时有效）
 	IPv4Enabled     bool     `json:"ipv4Enabled"`     // 是否采集 IPv4
 	IPv6Enabled     bool     `json:"ipv6Enabled"`     // 是否采集 IPv6
 	IPv4APIs        []string `json:"ipv4Apis"`        // IPv4 API 列表
 	IPv6APIs        []string `json:"ipv6Apis"`        // IPv6 API 列表
 }
 
-func (c *PublicIPConfig) IsIPv4Target(agentID string) bool {
+func (c *PublicIPConfig) IsIPv4Target(agentID string, agentTags []string) bool {
 	if c == nil || !c.IPv4Enabled {
 		return false
 	}
-	if c.IPv4Scope != "custom" {
-		return true
-	}
-	for _, id := range c.IPv4AgentIDs {
-		if id == agentID {
-			return true
-		}
-	}
-	return false
+	return isPublicIPTarget(c.IPv4Scope, c.IPv4AgentIDs, c.IPv4Tags, agentID, agentTags)
 }
 
-func (c *PublicIPConfig) IsIPv6Target(agentID string) bool {
+func (c *PublicIPConfig) IsIPv6Target(agentID string, agentTags []string) bool {
 	if c == nil || !c.IPv6Enabled {
 		return false
 	}
-	if c.IPv6Scope != "custom" {
+	return isPublicIPTarget(c.IPv6Scope, c.IPv6AgentIDs, c.IPv6Tags, agentID, agentTags)
+}
+
+// isPublicIPTarget 判断探针是否在采集范围内（全部 / 指定探针 / 按标签）
+func isPublicIPTarget(scope string, agentIDs []string, tags []string, agentID string, agentTags []string) bool {
+	switch scope {
+	case "", "all":
 		return true
-	}
-	for _, id := range c.IPv6AgentIDs {
-		if id == agentID {
-			return true
+	case "agents", "custom": // custom 为历史取值，等同按主机
+		for _, id := range agentIDs {
+			if id == agentID {
+				return true
+			}
 		}
+		return false
+	case "tags":
+		for _, tag := range agentTags {
+			for _, t := range tags {
+				if tag == t {
+					return true
+				}
+			}
+		}
+		return false
+	default:
+		return false
 	}
-	return false
 }
 
 // AlertConfig 全局告警配置
+// 历史配置：仅作为首次启动/升级时生成默认告警规则（alert_rules 表）的数据来源，运行时告警行为完全由告警规则驱动。
 type AlertConfig struct {
-	Enabled       bool               `json:"enabled"`       // 是否启用全局告警
 	MaskIP        bool               `json:"maskIP"`        // 是否在通知中打码 IP 地址
 	Rules         AlertRules         `json:"rules"`         // 告警规则
 	Notifications AlertNotifications `json:"notifications"` // 通知开关

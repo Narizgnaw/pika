@@ -1,9 +1,9 @@
-import {useEffect} from 'react';
+import {useEffect, useMemo} from 'react';
 import {App, Button, Form, Input, InputNumber, Radio, Select, Spin, Switch} from 'antd';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import type {PublicIPConfig} from '@/api/property';
 import {getPublicIPConfig, savePublicIPConfig} from '@/api/property';
-import {listAgentsByAdmin} from '@/api/agent.ts';
+import {listAgentsByAdmin, getTags} from '@/api/agent.ts';
 import {getErrorMessage} from '@/lib/utils';
 import type {Agent} from '@/types';
 import {SettingsActions, SettingsSection} from './SettingsSection';
@@ -12,6 +12,10 @@ interface PublicIPConfigProps {
     defaultIPv4APIs: string[];
     defaultIPv6APIs: string[];
 }
+
+// 历史取值 custom 等同按探针
+const normalizeScope = (scope: string | undefined): string =>
+    scope === 'tags' ? 'tags' : scope === 'agents' || scope === 'custom' ? 'agents' : 'all';
 
 const formatApiList = (apis: string[] | undefined, defaults: string[]) => {
     const list = apis && apis.length > 0 ? apis : defaults;
@@ -48,10 +52,20 @@ const PublicIPConfigComponent = ({defaultIPv4APIs, defaultIPv6APIs}: PublicIPCon
         queryFn: () => listAgentsByAdmin(),
     });
 
+    const {data: tagsData} = useQuery({
+        queryKey: ['agents', 'tags'],
+        queryFn: getTags,
+    });
+
     const agentOptions = (agentsResponse?.data || []).map((agent) => ({
         label: formatAgentLabel(agent),
         value: agent.id,
     }));
+
+    const tagOptions = useMemo(
+        () => (tagsData?.data?.tags || []).map((tag: string) => ({label: tag, value: tag})),
+        [tagsData],
+    );
 
     const saveMutation = useMutation({
         mutationFn: savePublicIPConfig,
@@ -69,10 +83,12 @@ const PublicIPConfigComponent = ({defaultIPv4APIs, defaultIPv6APIs}: PublicIPCon
             form.setFieldsValue({
                 enabled: config.enabled ?? false,
                 intervalSeconds: config.intervalSeconds ?? 300,
-                ipv4Scope: config.ipv4Scope ?? 'all',
+                ipv4Scope: normalizeScope(config.ipv4Scope),
                 ipv4AgentIds: config.ipv4AgentIds ?? [],
-                ipv6Scope: config.ipv6Scope ?? 'all',
+                ipv4Tags: config.ipv4Tags ?? [],
+                ipv6Scope: normalizeScope(config.ipv6Scope),
                 ipv6AgentIds: config.ipv6AgentIds ?? [],
+                ipv6Tags: config.ipv6Tags ?? [],
                 ipv4Enabled: config.ipv4Enabled ?? true,
                 ipv6Enabled: config.ipv6Enabled ?? true,
                 ipv4ApisText: formatApiList(config.ipv4Apis, defaultIPv4APIs),
@@ -88,9 +104,11 @@ const PublicIPConfigComponent = ({defaultIPv4APIs, defaultIPv6APIs}: PublicIPCon
                 enabled: values.enabled ?? false,
                 intervalSeconds: values.intervalSeconds ?? 300,
                 ipv4Scope: values.ipv4Scope ?? 'all',
-                ipv4AgentIds: values.ipv4Scope === 'custom' ? values.ipv4AgentIds || [] : [],
+                ipv4AgentIds: values.ipv4Scope === 'agents' ? values.ipv4AgentIds || [] : [],
+                ipv4Tags: values.ipv4Scope === 'tags' ? values.ipv4Tags || [] : [],
                 ipv6Scope: values.ipv6Scope ?? 'all',
-                ipv6AgentIds: values.ipv6Scope === 'custom' ? values.ipv6AgentIds || [] : [],
+                ipv6AgentIds: values.ipv6Scope === 'agents' ? values.ipv6AgentIds || [] : [],
+                ipv6Tags: values.ipv6Scope === 'tags' ? values.ipv6Tags || [] : [],
                 ipv4Enabled: values.ipv4Enabled ?? true,
                 ipv6Enabled: values.ipv6Enabled ?? true,
                 ipv4Apis: parseApiList(values.ipv4ApisText || '', defaultIPv4APIs),
@@ -107,10 +125,12 @@ const PublicIPConfigComponent = ({defaultIPv4APIs, defaultIPv6APIs}: PublicIPCon
             form.setFieldsValue({
                 enabled: config.enabled ?? false,
                 intervalSeconds: config.intervalSeconds ?? 300,
-                ipv4Scope: config.ipv4Scope ?? 'all',
+                ipv4Scope: normalizeScope(config.ipv4Scope),
                 ipv4AgentIds: config.ipv4AgentIds ?? [],
-                ipv6Scope: config.ipv6Scope ?? 'all',
+                ipv4Tags: config.ipv4Tags ?? [],
+                ipv6Scope: normalizeScope(config.ipv6Scope),
                 ipv6AgentIds: config.ipv6AgentIds ?? [],
+                ipv6Tags: config.ipv6Tags ?? [],
                 ipv4Enabled: config.ipv4Enabled ?? true,
                 ipv6Enabled: config.ipv6Enabled ?? true,
                 ipv4ApisText: formatApiList(config.ipv4Apis, defaultIPv4APIs),
@@ -159,25 +179,43 @@ const PublicIPConfigComponent = ({defaultIPv4APIs, defaultIPv6APIs}: PublicIPCon
                     <Form.Item label="IPv4 采集范围" name="ipv4Scope">
                         <Radio.Group>
                             <Radio.Button value="all">全部探针</Radio.Button>
-                            <Radio.Button value="custom">自定义探针</Radio.Button>
+                            <Radio.Button value="agents">按探针</Radio.Button>
+                            <Radio.Button value="tags">按标签</Radio.Button>
                         </Radio.Group>
                     </Form.Item>
                     <Form.Item noStyle shouldUpdate>
                         {({getFieldValue}) => {
                             const enabled = getFieldValue('ipv4Enabled');
                             const scope = getFieldValue('ipv4Scope');
-                            if (!enabled || scope !== 'custom') {
+                            if (!enabled || (scope !== 'agents' && scope !== 'tags')) {
                                 return null;
+                            }
+                            if (scope === 'tags') {
+                                return (
+                                    <Form.Item
+                                        label="选择标签"
+                                        name="ipv4Tags"
+                                        rules={[{required: true, message: '请选择至少一个标签'}]}
+                                        extra="拥有所选标签的探针都会执行采集"
+                                    >
+                                        <Select
+                                            mode="multiple"
+                                            placeholder="选择标签（可多选）"
+                                            options={tagOptions}
+                                            allowClear
+                                        />
+                                    </Form.Item>
+                                );
                             }
                             return (
                                 <Form.Item
-                                    label="选择 IPv4 探针"
+                                    label="选择探针"
                                     name="ipv4AgentIds"
                                     rules={[{required: true, message: '请选择至少一个探针'}]}
                                 >
                                     <Select
                                         mode="multiple"
-                                        placeholder="选择需要采集 IPv4 的探针"
+                                        placeholder="选择需要执行采集的探针"
                                         options={agentOptions}
                                         optionFilterProp="label"
                                         showSearch
@@ -202,25 +240,43 @@ const PublicIPConfigComponent = ({defaultIPv4APIs, defaultIPv6APIs}: PublicIPCon
                     <Form.Item label="IPv6 采集范围" name="ipv6Scope">
                         <Radio.Group>
                             <Radio.Button value="all">全部探针</Radio.Button>
-                            <Radio.Button value="custom">自定义探针</Radio.Button>
+                            <Radio.Button value="agents">按探针</Radio.Button>
+                            <Radio.Button value="tags">按标签</Radio.Button>
                         </Radio.Group>
                     </Form.Item>
                     <Form.Item noStyle shouldUpdate>
                         {({getFieldValue}) => {
                             const enabled = getFieldValue('ipv6Enabled');
                             const scope = getFieldValue('ipv6Scope');
-                            if (!enabled || scope !== 'custom') {
+                            if (!enabled || (scope !== 'agents' && scope !== 'tags')) {
                                 return null;
+                            }
+                            if (scope === 'tags') {
+                                return (
+                                    <Form.Item
+                                        label="选择标签"
+                                        name="ipv6Tags"
+                                        rules={[{required: true, message: '请选择至少一个标签'}]}
+                                        extra="拥有所选标签的探针都会执行采集"
+                                    >
+                                        <Select
+                                            mode="multiple"
+                                            placeholder="选择标签（可多选）"
+                                            options={tagOptions}
+                                            allowClear
+                                        />
+                                    </Form.Item>
+                                );
                             }
                             return (
                                 <Form.Item
-                                    label="选择 IPv6 探针"
+                                    label="选择探针"
                                     name="ipv6AgentIds"
                                     rules={[{required: true, message: '请选择至少一个探针'}]}
                                 >
                                     <Select
                                         mode="multiple"
-                                        placeholder="选择需要采集 IPv6 的探针"
+                                        placeholder="选择需要执行采集的探针"
                                         options={agentOptions}
                                         optionFilterProp="label"
                                         showSearch

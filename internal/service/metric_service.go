@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -456,11 +455,17 @@ func (s *MetricService) CleanMonitorCache(ctx context.Context, monitorID string)
 		return err
 	}
 
-	// 只在有过滤条件（指定了 AgentIds）时清理缓存
-	if len(monitorTask.AgentIds) > 0 {
+	// 解析目标探针集合（指定探针与标签匹配探针的并集，均未指定时对所有探针生效）
+	targetSet, err := resolveMonitorTargetSet(ctx, s.agentRepo, &monitorTask)
+	if err != nil {
+		return err
+	}
+
+	// 只在有过滤条件时清理缓存
+	if !targetSet.all {
 		// 遍历缓存中的探针，移除不再关联的探针数据
 		for agentId := range latestMetrics.Agents.Keys() {
-			if !slices.Contains(monitorTask.AgentIds, agentId) {
+			if !targetSet.Contains(agentId) {
 				// 该探针已不再关联到此监控任务，从缓存中移除
 				latestMetrics.Agents.Delete(agentId)
 				s.logger.Debug("从监控缓存中移除探针",
@@ -848,13 +853,19 @@ func (s *MetricService) GetMonitorHistory(ctx context.Context, monitorID string,
 	}
 
 	// 过滤掉已取消关联的 agent 数据（仅在有过滤条件时）
+	targetSet, err := resolveMonitorTargetSet(ctx, s.agentRepo, &monitorTask)
+	if err != nil {
+		s.logger.Error("解析监控目标探针失败", zap.String("monitorID", monitorID), zap.Error(err))
+		return nil, err
+	}
+
 	agentIdSet := make(map[string]struct{})
-	if len(monitorTask.AgentIds) > 0 {
+	if !targetSet.all {
 		// 有过滤条件，只保留当前关联的 agent 数据
 		filteredSeries := make([]metric.Series, 0)
 		for _, s := range series {
 			if agentId, ok := s.Labels["agent_id"]; ok {
-				if slices.Contains(monitorTask.AgentIds, agentId) {
+				if targetSet.Contains(agentId) {
 					filteredSeries = append(filteredSeries, s)
 					agentIdSet[agentId] = struct{}{}
 				}
@@ -922,18 +933,17 @@ func (s *MetricService) GetMonitorAgentStats(ctx context.Context, monitorID stri
 		return []protocol.MonitorData{}
 	}
 
+	// 解析目标探针集合（指定探针与标签匹配探针的并集，均未指定时对所有探针生效）
+	targetSet, err := resolveMonitorTargetSet(ctx, s.agentRepo, &monitorTask)
+	if err != nil {
+		s.logger.Error("解析监控目标探针失败", zap.String("monitorID", monitorID), zap.Error(err))
+		return []protocol.MonitorData{}
+	}
+
 	// 收集所有当前关联的 agentId（从缓存中过滤）
 	agentIds := make([]string, 0)
-	if len(monitorTask.AgentIds) > 0 {
-		// 有过滤条件，只保留匹配的 agent
-		for agentId := range latestMetrics.Agents.Keys() {
-			if slices.Contains(monitorTask.AgentIds, agentId) {
-				agentIds = append(agentIds, agentId)
-			}
-		}
-	} else {
-		// 无过滤条件，返回所有缓存中的 agent
-		for agentId := range latestMetrics.Agents.Keys() {
+	for agentId := range latestMetrics.Agents.Keys() {
+		if targetSet.Contains(agentId) {
 			agentIds = append(agentIds, agentId)
 		}
 	}
@@ -953,15 +963,8 @@ func (s *MetricService) GetMonitorAgentStats(ctx context.Context, monitorID stri
 	// 转换为数组并填充 agent 名称
 	result := make([]protocol.MonitorData, 0, len(agentIds))
 	for stat := range latestMetrics.Agents.Values() {
-		// 根据过滤条件决定是否包含该 agent
-		if len(monitorTask.AgentIds) > 0 {
-			// 有过滤条件，只返回当前关联的 agent 数据
-			if slices.Contains(monitorTask.AgentIds, stat.AgentId) {
-				stat.AgentName = agentNameMap[stat.AgentId] // 填充 agent 名称
-				result = append(result, *stat)
-			}
-		} else {
-			// 无过滤条件，返回所有 agent 数据
+		// 只返回目标集合内的 agent 数据
+		if targetSet.Contains(stat.AgentId) {
 			stat.AgentName = agentNameMap[stat.AgentId] // 填充 agent 名称
 			result = append(result, *stat)
 		}
@@ -994,12 +997,21 @@ func (s *MetricService) GetMonitorStats(ctx context.Context, monitorID string) *
 		}
 	}
 
+	// 解析目标探针集合（指定探针与标签匹配探针的并集，均未指定时对所有探针生效）
+	targetSet, err := resolveMonitorTargetSet(ctx, s.agentRepo, &monitorTask)
+	if err != nil {
+		s.logger.Error("解析监控目标探针失败", zap.String("monitorID", monitorID), zap.Error(err))
+		return &metric.MonitorStatsResult{
+			Status: "unknown",
+		}
+	}
+
 	// 聚合各探针数据
-	return s.aggregateMonitorStats(latestMetrics, monitorTask.AgentIds)
+	return s.aggregateMonitorStats(latestMetrics, targetSet)
 }
 
 // aggregateMonitorStats 聚合各探针的监控数据
-func (s *MetricService) aggregateMonitorStats(latestMetrics *metric.LatestMonitorMetrics, agentIds []string) *metric.MonitorStatsResult {
+func (s *MetricService) aggregateMonitorStats(latestMetrics *metric.LatestMonitorMetrics, targetSet monitorTargetSet) *metric.MonitorStatsResult {
 	result := &metric.MonitorStatsResult{
 		Status: "unknown",
 	}
@@ -1019,12 +1031,9 @@ func (s *MetricService) aggregateMonitorStats(latestMetrics *metric.LatestMonito
 	var minCertDaysLeft int
 
 	for stat := range latestMetrics.Agents.Values() {
-		// 根据过滤条件决定是否聚合该探针
-		if len(agentIds) > 0 {
-			// 有过滤条件，只聚合当前关联的探针数据
-			if !slices.Contains(agentIds, stat.AgentId) {
-				continue
-			}
+		// 只聚合目标集合内的探针数据
+		if !targetSet.Contains(stat.AgentId) {
+			continue
 		}
 
 		validCount++
