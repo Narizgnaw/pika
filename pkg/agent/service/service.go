@@ -113,39 +113,60 @@ type ServiceManager struct {
 	service service.Service
 }
 
-// systemd 自定义模板（支持自定义 RestartSec）
+// systemd 自定义模板（使用 kardianos/service v1.3 精简模板语法，并将 RestartSec 调整为 5 秒）
 const systemdScript = `[Unit]
-Description={{.Description}}
-ConditionFileIsExecutable={{.Path|cmdEscape}}
-{{range $i, $dep := .Dependencies}} 
-{{$dep}} {{end}}
+Description={{Description}}
+ConditionFileIsExecutable={{Path | cmdEscape}}
+{{range Dependencies}}{{.}}
+{{end}}
 
 [Service]
 StartLimitInterval=5
 StartLimitBurst=10
-ExecStart={{.Path|cmdEscape}}{{range .Arguments}} {{.|cmd}}{{end}}
-{{if .ChRoot}}RootDirectory={{.ChRoot|cmd}}{{end}}
-{{if .WorkingDirectory}}WorkingDirectory={{.WorkingDirectory|cmdEscape}}{{end}}
-{{if .UserName}}User={{.UserName}}{{end}}
-{{if .ReloadSignal}}ExecReload=/bin/kill -{{.ReloadSignal}} "$MAINPID"{{end}}
-{{if .PIDFile}}PIDFile={{.PIDFile|cmd}}{{end}}
-{{if and .LogOutput .HasOutputFileSupport -}}
-StandardOutput=file:{{.LogDirectory}}/{{.Name}}.out
-StandardError=file:{{.LogDirectory}}/{{.Name}}.err
-{{- end}}
-{{if gt .LimitNOFILE -1 }}LimitNOFILE={{.LimitNOFILE}}{{end}}
-{{if .Restart}}Restart={{.Restart}}{{end}}
-{{if .SuccessExitStatus}}SuccessExitStatus={{.SuccessExitStatus}}{{end}}
-RestartSec=5
-EnvironmentFile=-/etc/sysconfig/{{.Name}}
+ExecStart={{Path | cmdEscape}}{{range Arguments}} {{. | cmd}}{{end}}
+{{if ChRoot}}RootDirectory={{ChRoot | cmd}}
+{{end}}{{if WorkingDirectory}}WorkingDirectory={{WorkingDirectory | cmdEscape}}
+{{end}}{{if UserName}}User={{UserName}}
+{{end}}{{if ReloadSignal}}ExecReload=/bin/kill -{{ReloadSignal}} "$MAINPID"
+{{end}}{{if PIDFile}}PIDFile={{PIDFile | cmd}}
+{{end}}{{if OutputFileSupport}}StandardOutput=file:{{LogDirectory}}/{{Name}}.out
+StandardError=file:{{LogDirectory}}/{{Name}}.err
+{{end}}{{if LimitNOFILE}}LimitNOFILE={{LimitNOFILE}}
+{{end}}{{if Restart}}Restart={{Restart}}
+{{end}}{{if SuccessExitStatus}}SuccessExitStatus={{SuccessExitStatus}}
+{{end}}RestartSec=5
+EnvironmentFile=-/etc/sysconfig/{{Name}}
 
-{{range $k, $v := .EnvVars -}}
-Environment={{$k}}={{$v}}
-{{end -}}
-
-[Install]
+{{range EnvVars}}{{.}}
+{{end}}[Install]
 WantedBy=multi-user.target
 `
+
+func serviceOptions(goos string) service.KeyValue {
+	options := service.KeyValue{
+		// 其他 Unix 系统 (upstart/launchd)
+		"KeepAlive": true, // 保持运行
+		"RunAtLoad": true, // 启动时运行
+	}
+
+	switch goos {
+	case "darwin":
+	case "linux":
+		// 使用自定义 systemd 模板（支持自定义 RestartSec=5）
+		options["SystemdScript"] = systemdScript
+	case "windows":
+		// 失败动作: 重启服务
+		options["OnFailure"] = "restart"
+
+		// 重启延迟使用 time.Duration 字符串。
+		options["OnFailureDelayDuration"] = "1s"
+
+		// 服务稳定运行 24 小时后重置失败计数，单位为秒且必须使用 int。
+		options["OnFailureResetPeriod"] = 86400
+	}
+
+	return options
+}
 
 // NewServiceManager 创建服务管理器
 func NewServiceManager(cfg *config.Config) (*ServiceManager, error) {
@@ -155,30 +176,7 @@ func NewServiceManager(cfg *config.Config) (*ServiceManager, error) {
 		return nil, fmt.Errorf("get executable path failed: %w", err)
 	}
 
-	var options = service.KeyValue{
-		// 其他 Unix 系统 (upstart/launchd)
-		"KeepAlive": true, // 保持运行
-		"RunAtLoad": true, // 启动时运行
-	}
-
-	switch runtime.GOOS {
-	case "darwin":
-	case "linux":
-		// 使用自定义 systemd 模板（支持自定义 RestartSec=5）
-		options["SystemdScript"] = systemdScript
-	case "windows":
-		// 失败动作: 重启服务
-		options["OnFailure"] = "restart"
-
-		// 重启延迟: 单位为毫秒 (Milliseconds)
-		// 设置为 "0" 表示立即重启，设置为 "1000" 表示 1秒后重启
-		// 建议保留至少 1秒 (1000ms) 的缓冲，防止极端情况下的 CPU 飙升
-		options["RestartDelay"] = "1000"
-
-		// 重置失败计数的时间: 单位为秒 (Seconds)
-		// 意思是：如果服务连续运行了 24小时(86400秒)没有崩溃，那么之前的失败计数就会清零
-		options["ResetPeriod"] = "86400"
-	}
+	options := serviceOptions(runtime.GOOS)
 
 	// 配置服务
 	svcConfig := &service.Config{

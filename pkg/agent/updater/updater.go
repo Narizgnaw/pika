@@ -159,8 +159,10 @@ func (u *Updater) downloadAndUpdate(versionInfo *VersionInfo) error {
 
 	slog.Info("更新成功，进程即将退出，等待系统服务重启...")
 
-	// 退出当前进程，让系统服务管理器（systemd/supervisor等）自动重启
-	// 注意：这要求服务配置了自动重启（如 systemd 的 Restart=always）
+	// 使用非零状态退出，由 systemd Restart、launchd KeepAlive、Windows
+	// Recovery Actions 或 OpenWrt procd respawn 拉起新版本。不要在服务进程
+	// 内调用 service.Restart：部分平台的实现是先 Stop 再 Start，进程可能在
+	// Stop 阶段就被终止，无法执行后续的 Start。
 	os.Exit(1)
 
 	return nil
