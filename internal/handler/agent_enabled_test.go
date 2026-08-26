@@ -1,0 +1,81 @@
+package handler
+
+import (
+	"context"
+	"encoding/json"
+	"testing"
+
+	"github.com/glebarez/sqlite"
+	"github.com/pika-monitor/pika/internal/models"
+	"github.com/pika-monitor/pika/internal/protocol"
+	"github.com/pika-monitor/pika/internal/repo"
+	"github.com/pika-monitor/pika/internal/service"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+)
+
+func TestHandleWebSocketMessageIgnoresDisabledAgent(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := database.AutoMigrate(&models.Agent{}); err != nil {
+		t.Fatalf("migrate agent: %v", err)
+	}
+
+	agent := models.Agent{ID: "agent-disabled", Enabled: true}
+	if err := database.Create(&agent).Error; err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	if err := database.Model(&models.Agent{}).Where("id = ?", agent.ID).Update("enabled", false).Error; err != nil {
+		t.Fatalf("disable agent: %v", err)
+	}
+
+	h := &AgentHandler{
+		logger: zap.NewNop(),
+		agentService: &service.AgentService{
+			AgentRepo: repo.NewAgentRepo(database),
+		},
+	}
+	invalidMetrics := json.RawMessage(`{`)
+	if err := h.handleWebSocketMessage(context.Background(), agent.ID, string(protocol.MessageTypeMetrics), invalidMetrics); err != nil {
+		t.Fatalf("disabled agent data should be ignored, got error: %v", err)
+	}
+
+	if err := database.Model(&models.Agent{}).Where("id = ?", agent.ID).Update("enabled", true).Error; err != nil {
+		t.Fatalf("enable agent: %v", err)
+	}
+	if err := h.handleWebSocketMessage(context.Background(), agent.ID, string(protocol.MessageTypeMetrics), invalidMetrics); err == nil {
+		t.Fatal("enabled agent data should reach the metrics parser")
+	}
+}
+
+func TestDisabledAgentStatusCannotBeRefreshed(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := database.AutoMigrate(&models.Agent{}); err != nil {
+		t.Fatalf("migrate agent: %v", err)
+	}
+
+	agent := models.Agent{ID: "agent-status", Enabled: true, Status: 1}
+	if err := database.Create(&agent).Error; err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	agentService := &service.AgentService{AgentRepo: repo.NewAgentRepo(database)}
+	if err := agentService.UpdateAgentEnabled(context.Background(), agent.ID, false); err != nil {
+		t.Fatalf("disable agent: %v", err)
+	}
+	if err := agentService.UpdateAgentStatus(context.Background(), agent.ID, 1); err != nil {
+		t.Fatalf("refresh disabled agent status: %v", err)
+	}
+
+	var saved models.Agent
+	if err := database.First(&saved, "id = ?", agent.ID).Error; err != nil {
+		t.Fatalf("load agent: %v", err)
+	}
+	if saved.Enabled || saved.Status != 0 {
+		t.Fatalf("disabled agent status changed unexpectedly: enabled=%v status=%d", saved.Enabled, saved.Status)
+	}
+}

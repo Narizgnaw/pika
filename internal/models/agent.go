@@ -9,24 +9,25 @@ import (
 
 // Agent 探针信息
 type Agent struct {
-	ID         string                      `gorm:"primaryKey" json:"id"`                  // 探针ID (UUID)
-	Name       string                      `gorm:"index" json:"name"`                     // 探针名称
-	Hostname   string                      `gorm:"index" json:"hostname,omitempty"`       // 主机名
-	IP         string                      `gorm:"index" json:"ip,omitempty"`             // 连接 IP 地址
-	IPv4       string                      `gorm:"index" json:"ipv4,omitempty"`           // 公网 IPv4 地址
-	IPv6       string                      `gorm:"index" json:"ipv6,omitempty"`           // 公网 IPv6 地址
-	OS         string                      `json:"os"`                                    // 操作系统
-	Arch       string                      `json:"arch"`                                  // 架构
-	Version    string                      `json:"version"`                               // 探针版本
-	Tags       datatypes.JSONSlice[string] `json:"tags"`                                  // 标签
-	ExpireTime int64                       `json:"expireTime"`                            // 到期时间（时间戳毫秒）
-	Status     int                         `json:"status"`                                // 状态: 0-离线, 1-在线
-	Visibility string                      `gorm:"default:public" json:"visibility"`      // 可见性: public-匿名可见, private-登录可见
-	Weight     int                         `gorm:"default:0;index" json:"weight"`         // 展示顺序（由拖动排序维护，数字越大越靠前）
-	Remark     string                      `json:"remark"`                                // 备注信息
-	LastSeenAt int64                       `gorm:"index" json:"lastSeenAt"`               // 最后上线时间（时间戳毫秒）
-	CreatedAt  int64                       `json:"createdAt"`                             // 创建时间（时间戳毫秒）
-	UpdatedAt  int64                       `json:"updatedAt" gorm:"autoUpdateTime:milli"` // 更新时间（时间戳毫秒）
+	ID         string                      `gorm:"primaryKey" json:"id"`                       // 探针ID (UUID)
+	Name       string                      `gorm:"index" json:"name"`                          // 探针名称
+	Hostname   string                      `gorm:"index" json:"hostname,omitempty"`            // 主机名
+	IP         string                      `gorm:"index" json:"ip,omitempty"`                  // 连接 IP 地址
+	IPv4       string                      `gorm:"index" json:"ipv4,omitempty"`                // 公网 IPv4 地址
+	IPv6       string                      `gorm:"index" json:"ipv6,omitempty"`                // 公网 IPv6 地址
+	OS         string                      `json:"os"`                                         // 操作系统
+	Arch       string                      `json:"arch"`                                       // 架构
+	Version    string                      `json:"version"`                                    // 探针版本
+	Tags       datatypes.JSONSlice[string] `json:"tags"`                                       // 标签
+	ExpireTime int64                       `json:"expireTime"`                                 // 到期时间（时间戳毫秒）
+	Enabled    bool                        `gorm:"default:true;not null;index" json:"enabled"` // 是否接收并处理探针数据
+	Status     int                         `json:"status"`                                     // 状态: 0-离线, 1-在线
+	Visibility string                      `gorm:"default:public" json:"visibility"`           // 可见性: public-匿名可见, private-登录可见
+	Weight     int                         `gorm:"default:0;index" json:"weight"`              // 展示顺序（由拖动排序维护，数字越大越靠前）
+	Remark     string                      `json:"remark"`                                     // 备注信息
+	LastSeenAt int64                       `gorm:"index" json:"lastSeenAt"`                    // 最后上线时间（时间戳毫秒）
+	CreatedAt  int64                       `json:"createdAt"`                                  // 创建时间（时间戳毫秒）
+	UpdatedAt  int64                       `json:"updatedAt" gorm:"autoUpdateTime:milli"`      // 更新时间（时间戳毫秒）
 
 	// 流量统计相关字段
 	TrafficStats datatypes.JSONType[TrafficStatsData] `json:"trafficStats,omitempty"` // 流量统计

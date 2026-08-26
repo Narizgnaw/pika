@@ -4,7 +4,7 @@ import {Link, useNavigate} from 'react-router-dom';
 import type {MenuProps} from 'antd';
 import {App, Button, Dropdown, Form, Input, Select, Space, Tag} from 'antd';
 import type {ColumnsType} from 'antd/es/table';
-import {Edit, Eye, EyeOff, FileWarning, GripVertical, Lock, MoreVertical, Plus, RefreshCw, Shield, Tags, Trash2} from 'lucide-react';
+import {Edit, Eye, EyeOff, FileWarning, GripVertical, Lock, MoreVertical, Play, Plus, PowerOff, RefreshCw, Shield, Tags, Trash2} from 'lucide-react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import type {DragEndEvent} from '@dnd-kit/core';
 import {DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors} from '@dnd-kit/core';
@@ -18,7 +18,7 @@ import {
 } from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
 import dayjs from 'dayjs';
-import {deleteAgent, getTags, listAgentsByAdmin, updateAgentOrder} from '@/api/agent.ts';
+import {deleteAgent, getTags, listAgentsByAdmin, updateAgentEnabled, updateAgentOrder} from '@/api/agent.ts';
 import type {Agent} from '@/types';
 import {getErrorMessage} from '@/lib/utils';
 import {PageHeader} from '@/components/PageHeader';
@@ -146,6 +146,17 @@ const AgentList = () => {
         },
     });
 
+    const enabledMutation = useMutation({
+        mutationFn: ({agentId, enabled}: {agentId: string; enabled: boolean}) => updateAgentEnabled(agentId, enabled),
+        onSuccess: (_response, variables) => {
+            messageApi.success(variables.enabled ? '主机已启用' : '主机已禁用');
+            queryClient.invalidateQueries({queryKey: ['admin', 'agents']});
+        },
+        onError: (error: unknown, variables) => {
+            messageApi.error(getErrorMessage(error, variables.enabled ? '启用主机失败' : '禁用主机失败'));
+        },
+    });
+
     const orderMutation = useMutation({
         mutationFn: (agentIds: string[]) => updateAgentOrder(agentIds),
         onMutate: async (agentIds) => {
@@ -219,6 +230,23 @@ const AgentList = () => {
         });
     };
 
+    const handleEnabledChange = (agent: Agent) => {
+        if (!agent.enabled) {
+            enabledMutation.mutate({agentId: agent.id, enabled: true});
+            return;
+        }
+
+        modal.confirm({
+            title: '禁用主机',
+            content: `确定要禁用主机「${agent.name || agent.hostname}」吗？禁用期间接收到的数据将被忽略，也不会触发告警。`,
+            okText: '确认禁用',
+            cancelText: '取消',
+            okButtonProps: {danger: true},
+            centered: true,
+            onOk: () => enabledMutation.mutateAsync({agentId: agent.id, enabled: false}),
+        });
+    };
+
     const handleBatchTags = () => {
         if (selectedRowKeys.length === 0) {
             messageApi.warning('请先选择要操作的探针');
@@ -270,9 +298,11 @@ const AgentList = () => {
         }
 
         // 状态过滤
-        if (status) {
+        if (status === 'disabled') {
+            result = result.filter((agent: Agent) => !agent.enabled);
+        } else if (status) {
             const statusValue = status === 'online' ? 1 : 0;
-            result = result.filter((agent: Agent) => agent.status === statusValue);
+            result = result.filter((agent: Agent) => agent.enabled && agent.status === statusValue);
         }
 
         // 标签过滤
@@ -356,11 +386,16 @@ const AgentList = () => {
             dataIndex: 'status',
             key: 'status',
             width: 80,
-            render: (_, record) => (
-                <Tag color={record.status === 1 ? 'success' : 'default'}>
-                    {record.status === 1 ? '在线' : '离线'}
-                </Tag>
-            ),
+            render: (_, record) => {
+                if (!record.enabled) {
+                    return <Tag color="warning">已禁用</Tag>;
+                }
+                return (
+                    <Tag color={record.status === 1 ? 'success' : 'default'}>
+                        {record.status === 1 ? '在线' : '离线'}
+                    </Tag>
+                );
+            },
         },
         {
             title: '可见性',
@@ -555,6 +590,17 @@ const AgentList = () => {
                         type: 'divider',
                     },
                     {
+                        key: 'enabled',
+                        label: record.enabled ? '禁用主机' : '启用主机',
+                        icon: record.enabled ? <PowerOff size={14}/> : <Play size={14}/>,
+                        danger: record.enabled,
+                        disabled: enabledMutation.isPending,
+                        onClick: () => handleEnabledChange(record),
+                    },
+                    {
+                        type: 'divider',
+                    },
+                    {
                         key: 'delete',
                         label: '删除探针',
                         icon: <Trash2 size={14}/>,
@@ -621,6 +667,7 @@ const AgentList = () => {
                                     options={[
                                         {label: '在线', value: 'online'},
                                         {label: '离线', value: 'offline'},
+                                        {label: '已禁用', value: 'disabled'},
                                     ]}
                                 />
                             </Form.Item>

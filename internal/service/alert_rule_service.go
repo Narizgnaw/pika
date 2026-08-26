@@ -229,17 +229,26 @@ func (s *AlertRuleService) ResolveForAgents(ctx context.Context, agentIDs []stri
 		return result, nil
 	}
 
-	// 查询主机信息用于标签匹配
+	// 查询主机信息用于启用状态检查和标签匹配。禁用主机不命中任何告警规则，
+	// 从而统一阻止指标、离线、到期和监控等所有类型的告警。
 	agentTagMap := make(map[string][]string, len(agentIDs))
+	enabledAgents := make(map[string]struct{}, len(agentIDs))
 	agents, err := s.agentRepo.FindByIdIn(ctx, agentIDs)
 	if err != nil {
 		return nil, err
 	}
 	for _, agent := range agents {
+		if !agent.Enabled {
+			continue
+		}
+		enabledAgents[agent.ID] = struct{}{}
 		agentTagMap[agent.ID] = agent.Tags
 	}
 
 	for _, agentID := range agentIDs {
+		if _, enabled := enabledAgents[agentID]; !enabled {
+			continue
+		}
 		for i := range rules {
 			if !ruleMatchesAgent(&rules[i], agentID, agentTagMap[agentID]) {
 				continue

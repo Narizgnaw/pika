@@ -66,6 +66,14 @@ func (s *AgentService) RegisterAgent(ctx context.Context, ip string, info *proto
 	// 这样即使主机名变化，也能正确识别
 	existingAgent, err := s.AgentRepo.FindById(ctx, info.ID)
 	if err == nil {
+		// 已禁用的探针仅维持连接，不用注册报文刷新任何主机数据或在线状态。
+		if !existingAgent.Enabled {
+			s.logger.Info("disabled agent reconnected; registration data ignored",
+				zap.String("agentID", existingAgent.ID),
+				zap.String("hostname", existingAgent.Hostname))
+			return &existingAgent, nil
+		}
+
 		// 更新现有探针信息（允许主机名、名称等变化）
 		now := time.Now().UnixMilli()
 		existingAgent.Hostname = info.Hostname
@@ -117,6 +125,7 @@ func (s *AgentService) RegisterAgent(ctx context.Context, ip string, info *proto
 		OS:         info.OS,
 		Arch:       info.Arch,
 		Version:    info.Version,
+		Enabled:    true,
 		Status:     1,
 		LastSeenAt: now,
 		CreatedAt:  now,
@@ -139,6 +148,27 @@ func (s *AgentService) RegisterAgent(ctx context.Context, ip string, info *proto
 // UpdateAgentStatus 更新探针状态
 func (s *AgentService) UpdateAgentStatus(ctx context.Context, agentID string, status int) error {
 	return s.AgentRepo.UpdateStatus(ctx, agentID, status, time.Now().UnixMilli())
+}
+
+// IsAgentEnabled 查询探针是否允许接收并处理数据。
+func (s *AgentService) IsAgentEnabled(ctx context.Context, agentID string) (bool, error) {
+	return s.AgentRepo.IsEnabled(ctx, agentID)
+}
+
+// UpdateAgentEnabled 更新探针启用状态。禁用时立即标记离线，后续状态更新由仓储层原子拦截。
+func (s *AgentService) UpdateAgentEnabled(ctx context.Context, agentID string, enabled bool) error {
+	if _, err := s.AgentRepo.FindById(ctx, agentID); err != nil {
+		return err
+	}
+
+	updates := map[string]interface{}{
+		"enabled":    enabled,
+		"updated_at": time.Now().UnixMilli(),
+	}
+	if !enabled {
+		updates["status"] = 0
+	}
+	return s.AgentRepo.UpdateColumnsById(ctx, agentID, updates)
 }
 
 // UpdatePublicIP 更新探针的公网 IP 信息

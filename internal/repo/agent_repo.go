@@ -32,15 +32,27 @@ func (r *AgentRepo) UpdateStatus(ctx context.Context, agentID string, status int
 
 	return r.db.WithContext(ctx).
 		Model(&models.Agent{}).
-		Where("id = ?", agentID).
+		Where("id = ? AND enabled = ?", agentID, true).
 		Updates(m).Error
+}
+
+// IsEnabled 查询探针是否允许接收并处理数据。
+func (r *AgentRepo) IsEnabled(ctx context.Context, agentID string) (bool, error) {
+	var agent models.Agent
+	if err := r.db.WithContext(ctx).
+		Select("id", "enabled").
+		Where("id = ?", agentID).
+		First(&agent).Error; err != nil {
+		return false, err
+	}
+	return agent.Enabled, nil
 }
 
 // FindOnlineAgents 查找所有在线探针
 func (r *AgentRepo) FindOnlineAgents(ctx context.Context) ([]models.Agent, error) {
 	var agents []models.Agent
 	err := r.db.WithContext(ctx).
-		Where("status = ?", 1).
+		Where("status = ? AND enabled = ?", 1, true).
 		Find(&agents).Error
 	return agents, err
 }
@@ -136,7 +148,7 @@ func (r *AgentRepo) GetStatistics(ctx context.Context) (total int64, online int6
 	// 获取在线数量
 	err = r.db.WithContext(ctx).
 		Model(&models.Agent{}).
-		Where("status = ?", 1).
+		Where("status = ? AND enabled = ?", 1, true).
 		Count(&online).Error
 
 	return total, online, err

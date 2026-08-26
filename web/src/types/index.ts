@@ -26,6 +26,7 @@ export interface Agent {
     version: string;
     tags?: string[];         // 标签
     expireTime?: number;     // 到期时间（时间戳毫秒）
+    enabled: boolean;        // 是否接收并处理探针数据
     status: number;
     visibility?: string;     // 可见性: public-匿名可见, private-登录可见
     weight?: number;         // 展示顺序（由拖动排序维护）

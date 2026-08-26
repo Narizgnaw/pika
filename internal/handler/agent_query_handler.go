@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"encoding/json"
+
 	"github.com/go-orz/orz"
 	"github.com/labstack/echo/v5"
 	"github.com/pika-monitor/pika/internal/models"
@@ -30,6 +32,19 @@ func (h *AgentHandler) Get(c *echo.Context) error {
 		agent.IPv4 = ""
 		agent.IPv6 = ""
 		agent.Hostname = ""
+	}
+
+	if !isAuthenticated {
+		payload, err := json.Marshal(agent)
+		if err != nil {
+			return err
+		}
+		var publicAgent map[string]any
+		if err := json.Unmarshal(payload, &publicAgent); err != nil {
+			return err
+		}
+		delete(publicAgent, "enabled")
+		return orz.Ok(c, publicAgent)
 	}
 
 	return orz.Ok(c, agent)

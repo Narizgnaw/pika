@@ -208,6 +208,8 @@ func setupApi(app *orz.App, components *AppComponents) error {
 		adminApi.GET("/agents/:id", components.AgentHandler.GetForAdmin)
 		adminApi.GET("/agents/:id/metrics/latest", components.AgentHandler.GetAdminLatestMetrics)
 		adminApi.PUT("/agents/:id", components.AgentHandler.UpdateInfo)
+		adminApi.POST("/agents/:id/enable", components.AgentHandler.Enable)
+		adminApi.POST("/agents/:id/disable", components.AgentHandler.Disable)
 		adminApi.POST("/agents/batch/tags", components.AgentHandler.BatchUpdateTags)
 		adminApi.POST("/agents/batch/visibility", components.AgentHandler.BatchUpdateVisibility)
 		adminApi.DELETE("/agents/:id", components.AgentHandler.Delete)

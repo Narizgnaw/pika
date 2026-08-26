@@ -28,7 +28,9 @@ func (h *AgentHandler) HandleWebSocket(c *echo.Context) error {
 	}
 
 	// 注册探针 - 使用独立的context,不依赖HTTP请求的context
+	h.enabledMu.RLock()
 	agent, err := h.agentService.RegisterAgent(context.Background(), c.RealIP(), &registerReq.AgentInfo, registerReq.ApiKey)
+	h.enabledMu.RUnlock()
 	if err != nil {
 		// 发送注册失败响应
 		h.sendRegisterError(conn, err.Error())
@@ -47,20 +49,22 @@ func (h *AgentHandler) HandleWebSocket(c *echo.Context) error {
 		return err
 	}
 
-	// 下发防篡改配置
-	if err := h.sendTamperConfig(conn, agent.ID); err != nil {
-		h.logger.Error("failed to send tamper config", zap.Error(err))
-		// 配置下发失败不中断连接，只记录日志
-	}
-	// 下发SSH登录监控配置
-	if err := h.sendSSHLoginConfig(conn, agent.ID); err != nil {
-		h.logger.Error("failed to send ssh login config", zap.Error(err))
-		// 配置下发失败不中断连接，只记录日志
-	}
-	// 下发公网 IP 采集配置
-	if err := h.sendPublicIPConfig(conn, agent.ID); err != nil {
-		h.logger.Error("failed to send public ip config", zap.Error(err))
-		// 配置下发失败不中断连接，只记录日志
+	if agent.Enabled {
+		// 下发防篡改配置
+		if err := h.sendTamperConfig(conn, agent.ID); err != nil {
+			h.logger.Error("failed to send tamper config", zap.Error(err))
+			// 配置下发失败不中断连接，只记录日志
+		}
+		// 下发SSH登录监控配置
+		if err := h.sendSSHLoginConfig(conn, agent.ID); err != nil {
+			h.logger.Error("failed to send ssh login config", zap.Error(err))
+			// 配置下发失败不中断连接，只记录日志
+		}
+		// 下发公网 IP 采集配置
+		if err := h.sendPublicIPConfig(conn, agent.ID); err != nil {
+			h.logger.Error("failed to send public ip config", zap.Error(err))
+			// 配置下发失败不中断连接，只记录日志
+		}
 	}
 
 	// 创建客户端并注册到管理器
@@ -76,6 +80,17 @@ func (h *AgentHandler) HandleWebSocket(c *echo.Context) error {
 
 // handleWebSocketMessage 处理WebSocket消息
 func (h *AgentHandler) handleWebSocketMessage(ctx context.Context, agentID string, messageType string, data json.RawMessage) error {
+	h.enabledMu.RLock()
+	defer h.enabledMu.RUnlock()
+
+	enabled, err := h.agentService.IsAgentEnabled(ctx, agentID)
+	if err != nil {
+		return err
+	}
+	if !enabled {
+		return nil
+	}
+
 	switch protocol.MessageType(messageType) {
 	case protocol.MessageTypeMetrics:
 		return h.handleMetricsMessage(ctx, agentID, data)

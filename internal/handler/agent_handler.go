@@ -1,13 +1,39 @@
 package handler
 
 import (
+	"sync"
+
+	"github.com/go-orz/orz"
 	"github.com/gorilla/websocket"
+	"github.com/labstack/echo/v5"
 	"github.com/pika-monitor/pika/internal/service"
 	ws "github.com/pika-monitor/pika/internal/websocket"
 	"go.uber.org/zap"
 )
 
+// Enable 启用探针数据处理。
+func (h *AgentHandler) Enable(c *echo.Context) error {
+	return h.updateEnabled(c, true)
+}
+
+// Disable 禁用探针数据处理和告警。
+func (h *AgentHandler) Disable(c *echo.Context) error {
+	return h.updateEnabled(c, false)
+}
+
+func (h *AgentHandler) updateEnabled(c *echo.Context, enabled bool) error {
+	h.enabledMu.Lock()
+	defer h.enabledMu.Unlock()
+
+	agentID := c.Param("id")
+	if err := h.agentService.UpdateAgentEnabled(c.Request().Context(), agentID, enabled); err != nil {
+		return err
+	}
+	return orz.Ok(c, orz.Map{})
+}
+
 type AgentHandler struct {
+	enabledMu       sync.RWMutex
 	logger          *zap.Logger
 	agentService    *service.AgentService
 	trafficService  *service.TrafficService

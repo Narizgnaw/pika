@@ -483,6 +483,11 @@ export const deleteAgent = (agentId: string) => {
     return del(`/admin/agents/${agentId}`);
 };
 
+// 启用或禁用探针数据处理
+export const updateAgentEnabled = (agentId: string, enabled: boolean) => {
+    return post(`/admin/agents/${agentId}/${enabled ? 'enable' : 'disable'}`);
+};
+
 // 获取所有探针的标签
 export interface GetTagsResponse {
     tags: string[];
