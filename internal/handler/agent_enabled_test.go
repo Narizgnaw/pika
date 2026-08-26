@@ -107,4 +107,13 @@ func TestPublicAgentQueriesExcludeDisabledAgents(t *testing.T) {
 	if len(publicAgents) != 1 || publicAgents[0].ID != "public-enabled" {
 		t.Fatalf("unexpected public agents: %+v", publicAgents)
 	}
+
+	authenticatedAgents, err := (&service.AgentService{AgentRepo: repo.NewAgentRepo(database)}).
+		ListByAuth(context.Background(), true)
+	if err != nil {
+		t.Fatalf("query authenticated agents: %v", err)
+	}
+	if len(authenticatedAgents) != 1 || authenticatedAgents[0].ID != "public-enabled" {
+		t.Fatalf("authenticated query returned disabled agents: %+v", authenticatedAgents)
+	}
 }

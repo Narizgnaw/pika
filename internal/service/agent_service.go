@@ -512,7 +512,7 @@ func (s *AgentService) DeleteAgent(ctx context.Context, agentID string) error {
 // ListByAuth 根据认证状态列出探针（已登录返回全部，未登录返回公开可见）
 func (s *AgentService) ListByAuth(ctx context.Context, isAuthenticated bool) ([]models.Agent, error) {
 	if isAuthenticated {
-		return s.AgentRepo.FindAll(ctx)
+		return s.AgentRepo.FindEnabledAgents(ctx)
 	}
 	return s.AgentRepo.FindPublicAgents(ctx)
 }
@@ -523,6 +523,9 @@ func (s *AgentService) GetAgentByAuth(ctx context.Context, id string, isAuthenti
 	if isAuthenticated {
 		agent, err := s.AgentRepo.FindById(ctx, id)
 		if err == nil {
+			if !agent.Enabled {
+				return nil, gorm.ErrRecordNotFound
+			}
 			return &agent, nil
 		}
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -532,6 +535,9 @@ func (s *AgentService) GetAgentByAuth(ctx context.Context, id string, isAuthenti
 		agent, err = s.AgentRepo.FindByShortID(ctx, id)
 		if err != nil {
 			return nil, err
+		}
+		if !agent.Enabled {
+			return nil, gorm.ErrRecordNotFound
 		}
 		return &agent, nil
 	}

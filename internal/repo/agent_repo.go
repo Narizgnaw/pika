@@ -57,6 +57,15 @@ func (r *AgentRepo) FindOnlineAgents(ctx context.Context) ([]models.Agent, error
 	return agents, err
 }
 
+// FindEnabledAgents 查找所有启用的探针。
+func (r *AgentRepo) FindEnabledAgents(ctx context.Context) ([]models.Agent, error) {
+	var agents []models.Agent
+	err := r.db.WithContext(ctx).
+		Where("enabled = ?", true).
+		Find(&agents).Error
+	return agents, err
+}
+
 // FindByIP 根据公网IP查找探针
 func (r *AgentRepo) FindByIP(ctx context.Context, ip string) (*models.Agent, error) {
 	var agent models.Agent
