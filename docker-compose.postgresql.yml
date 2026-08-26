@@ -1,13 +1,13 @@
 services:
   postgresql:
-    image: postgres:17
+    image: postgres:18
     container_name: pika-postgresql
     environment:
       POSTGRES_DB: pika
       POSTGRES_USER: pika
       POSTGRES_PASSWORD: pika
     volumes:
-      - ./data/postgresql:/var/lib/postgresql/data
+      - ./data/postgresql:/var/lib/postgresql
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
