@@ -6,7 +6,7 @@ Lightweight probe monitoring — Go + PostgreSQL/SQLite + VictoriaMetrics
 
 [![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)](.) [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](.) [![License](https://img.shields.io/badge/license-Apache--2.0-green)](./LICENSE) [![Stars](https://img.shields.io/github/stars/pika-monitor/pika?style=social)](https://github.com/pika-monitor/pika)
 
-[English](./README.md) | [简体中文](./README.zh-CN.md) · [Website](https://pika.termark.app) · [Docs](./docs/features.md) · [Telegram](https://t.me/next_terminal)
+[English](./README.md) | [简体中文](./README.zh-CN.md) · [Website](https://pika.termark.app) · [Docs](./docs/features.md)
 
 </div>
 
@@ -72,10 +72,8 @@ See [PostgreSQL guide](./docs/deployment-postgresql.md).
 
 ## Community
 
-- Telegram: https://t.me/next_terminal
-- WeChat: add with note `pika`
+- Community: See https://pika.termark.app for community channels.
 
-![WeChat](screenshots/wx1.png)
 
 ---
 

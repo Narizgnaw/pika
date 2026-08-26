@@ -12,7 +12,6 @@
 
 Pika 是一个轻量级的探针监控系统，支持实时数据采集、存储和查询。系统采用 WebSocket 进行探针与服务端的通信，使用 VictoriaMetrics 存储时序指标数据，支持 PostgreSQL 和 SQLite 两种数据库方案。除了基础监控功能外，还提供 Linux 应急响应和安全基线检查能力，帮助快速发现和分析系统安全风险。
 
-
 ## 功能特性
 
 - **📊 实时性能监控**：CPU、内存、磁盘、网络、GPU、温度等系统资源监控
@@ -89,8 +88,6 @@ docker-compose -f docker-compose.postgresql.yml up -d
 
 ## 加入群聊 
 
-请备注 pika
+请见官网 https://pika.termark.app 获取社群入口
 
-<img src="screenshots/wx1.png" width="300" height="auto"/>
-
-https://t.me/next_terminal
+https://pika.termark.app
