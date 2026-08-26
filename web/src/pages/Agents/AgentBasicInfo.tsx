@@ -105,8 +105,6 @@ const AgentBasicInfo = ({agentId}: AgentBasicInfoProps) => {
                             {agent.visibility === 'public' ? '匿名可见' : '登录可见'}
                         </Tag>
                     </Descriptions.Item>
-                    <Descriptions.Item label="排序权重">{agent.weight || 0}</Descriptions.Item>
-
                     <Descriptions.Item label="标签" span={{xs: 1, sm: 2, lg: 3}}>
                         {agent.tags && agent.tags.length > 0 ? (
                             <div className="flex flex-wrap gap-1">

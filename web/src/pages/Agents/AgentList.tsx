@@ -1,12 +1,24 @@
-import {useMemo, useState} from 'react';
+import {createContext, useContext, useMemo, useState} from 'react';
+import type {CSSProperties, HTMLAttributes} from 'react';
 import {Link, useNavigate} from 'react-router-dom';
 import type {MenuProps} from 'antd';
-import {App, Button, Divider, Dropdown, Form, Input, Select, Space, Tag, message} from 'antd';
+import {App, Button, Dropdown, Form, Input, Select, Space, Tag} from 'antd';
 import type {ColumnsType} from 'antd/es/table';
-import {Edit, Eye, EyeOff, FileWarning, Lock, MoreVertical, Plus, RefreshCw, Shield, Tags, Trash2} from 'lucide-react';
+import {Edit, Eye, EyeOff, FileWarning, GripVertical, Lock, MoreVertical, Plus, RefreshCw, Shield, Tags, Trash2} from 'lucide-react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import type {DragEndEvent} from '@dnd-kit/core';
+import {DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors} from '@dnd-kit/core';
+import {restrictToVerticalAxis} from '@dnd-kit/modifiers';
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import {CSS} from '@dnd-kit/utilities';
 import dayjs from 'dayjs';
-import {deleteAgent, getTags, listAgentsByAdmin} from '@/api/agent.ts';
+import {deleteAgent, getTags, listAgentsByAdmin, updateAgentOrder} from '@/api/agent.ts';
 import type {Agent} from '@/types';
 import {getErrorMessage} from '@/lib/utils';
 import {PageHeader} from '@/components/PageHeader';
@@ -16,6 +28,68 @@ import BatchTagsModal from './BatchTagsModal';
 import BatchTamperProtectionModal from './BatchTamperProtectionModal';
 import BatchSSHLoginConfigModal from './BatchSSHLoginConfigModal';
 import BatchVisibilityModal from './BatchVisibilityModal';
+
+type SortableRowHook = ReturnType<typeof useSortable>;
+
+interface SortableRowContextValue {
+    listeners?: SortableRowHook['listeners'];
+    setActivatorNodeRef?: SortableRowHook['setActivatorNodeRef'];
+}
+
+interface SortableRowProps extends HTMLAttributes<HTMLTableRowElement> {
+    'data-row-key': string;
+}
+
+const SortableRowContext = createContext<SortableRowContextValue>({});
+const SortingDisabledContext = createContext(false);
+
+const DragHandle = () => {
+    const disabled = useContext(SortingDisabledContext);
+    const {listeners, setActivatorNodeRef} = useContext(SortableRowContext);
+
+    return (
+        <Button
+            ref={setActivatorNodeRef}
+            type="text"
+            size="small"
+            icon={<GripVertical size={16}/>}
+            disabled={disabled}
+            aria-label="拖动调整探针顺序"
+            title="拖动调整顺序"
+            style={{cursor: disabled ? 'not-allowed' : 'grab', touchAction: 'none'}}
+            {...listeners}
+        />
+    );
+};
+
+const SortableRow = (props: SortableRowProps) => {
+    const disabled = useContext(SortingDisabledContext);
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        setActivatorNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({id: props['data-row-key'], disabled});
+    const style: CSSProperties = {
+        ...props.style,
+        transform: CSS.Translate.toString(transform),
+        transition,
+        ...(isDragging ? {position: 'relative', zIndex: 2} : {}),
+    };
+    const contextValue = useMemo(
+        () => ({listeners, setActivatorNodeRef}),
+        [listeners, setActivatorNodeRef],
+    );
+
+    return (
+        <SortableRowContext.Provider value={contextValue}>
+            <tr {...props} ref={setNodeRef} style={style} {...attributes}/>
+        </SortableRowContext.Provider>
+    );
+};
 
 const AgentList = () => {
     const navigate = useNavigate();
@@ -35,6 +109,10 @@ const AgentList = () => {
     const [keyword, setKeyword] = useState('');
     const [status, setStatus] = useState<string | undefined>(undefined);
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
+    const sensors = useSensors(
+        useSensor(PointerSensor, {activationConstraint: {distance: 4}}),
+        useSensor(KeyboardSensor, {coordinateGetter: sortableKeyboardCoordinates}),
+    );
 
     const {data: tags = []} = useQuery({
         queryKey: ['admin', 'agents', 'tags'],
@@ -65,6 +143,36 @@ const AgentList = () => {
         },
         onError: (error: unknown) => {
             messageApi.error(getErrorMessage(error, '删除探针失败'));
+        },
+    });
+
+    const orderMutation = useMutation({
+        mutationFn: (agentIds: string[]) => updateAgentOrder(agentIds),
+        onMutate: async (agentIds) => {
+            await queryClient.cancelQueries({queryKey: ['admin', 'agents'], exact: true});
+            const previousAgents = queryClient.getQueryData<Agent[]>(['admin', 'agents']);
+            if (previousAgents) {
+                const agentsByID = new Map(previousAgents.map(agent => [agent.id, agent]));
+                const reorderedAgents = agentIds
+                    .map(agentID => agentsByID.get(agentID))
+                    .filter((agent): agent is Agent => agent !== undefined);
+                if (reorderedAgents.length === previousAgents.length) {
+                    queryClient.setQueryData(['admin', 'agents'], reorderedAgents);
+                }
+            }
+            return {previousAgents};
+        },
+        onSuccess: () => {
+            messageApi.success('探针排序已保存');
+        },
+        onError: (error: unknown, _agentIds, context) => {
+            if (context?.previousAgents) {
+                queryClient.setQueryData(['admin', 'agents'], context.previousAgents);
+            }
+            messageApi.error(getErrorMessage(error, '保存探针排序失败'));
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({queryKey: ['admin', 'agents'], exact: true});
         },
     });
 
@@ -177,7 +285,40 @@ const AgentList = () => {
         return result;
     }, [agents, keyword, status, selectedTags]);
 
+    const handleDragEnd = ({active, over}: DragEndEvent) => {
+        if (!over || active.id === over.id || orderMutation.isPending) {
+            return;
+        }
+
+        const activeIndex = filteredAgents.findIndex(agent => agent.id === active.id);
+        const overIndex = filteredAgents.findIndex(agent => agent.id === over.id);
+        if (activeIndex < 0 || overIndex < 0) {
+            return;
+        }
+
+        const reorderedVisibleAgents = arrayMove(filteredAgents, activeIndex, overIndex);
+        const visibleAgentIDs = new Set(filteredAgents.map(agent => agent.id));
+        let visibleIndex = 0;
+        const reorderedAgents = agents.map(agent => {
+            if (!visibleAgentIDs.has(agent.id)) {
+                return agent;
+            }
+            const reorderedAgent = reorderedVisibleAgents[visibleIndex];
+            visibleIndex += 1;
+            return reorderedAgent;
+        });
+        orderMutation.mutate(reorderedAgents.map(agent => agent.id));
+    };
+
     const columns: ColumnsType<Agent> = [
+        {
+            title: '排序',
+            key: 'sort',
+            fixed: 'left',
+            align: 'center',
+            width: 56,
+            render: () => <DragHandle/>,
+        },
         {
             title: '名称',
             dataIndex: 'name',
@@ -355,12 +496,6 @@ const AgentList = () => {
                 }
                 return <Tag color="green" variant={'filled'}>已启用</Tag>;
             },
-        },
-        {
-            title: '排序权重',
-            dataIndex: 'weight',
-            key: 'weight',
-            width: 100,
         },
         {
             title: '备注',
@@ -549,20 +684,36 @@ const AgentList = () => {
                 </div>
             )}
 
-            <AdminDataTable<Agent>
-                    columns={columns}
-                    dataSource={filteredAgents}
-                    loading={isLoading || isFetching}
-                    rowKey="id"
-                    scroll={{x: 2600}}
-                    tableLayout="fixed"
-                    rowSelection={{
-                        selectedRowKeys,
-                        onChange: (keys) => setSelectedRowKeys(keys),
-                        preserveSelectedRowKeys: true,
-                    }}
-                pagination={false}
-            />
+            <SortingDisabledContext.Provider
+                value={isLoading || isFetching || orderMutation.isPending || filteredAgents.length < 2}
+            >
+                <DndContext
+                    sensors={sensors}
+                    modifiers={[restrictToVerticalAxis]}
+                    onDragEnd={handleDragEnd}
+                >
+                    <SortableContext
+                        items={filteredAgents.map(agent => agent.id)}
+                        strategy={verticalListSortingStrategy}
+                    >
+                        <AdminDataTable<Agent>
+                            columns={columns}
+                            dataSource={filteredAgents}
+                            loading={isLoading || isFetching}
+                            rowKey="id"
+                            components={{body: {row: SortableRow}}}
+                            scroll={{x: 2600}}
+                            tableLayout="fixed"
+                            rowSelection={{
+                                selectedRowKeys,
+                                onChange: (keys) => setSelectedRowKeys(keys),
+                                preserveSelectedRowKeys: true,
+                            }}
+                            pagination={false}
+                        />
+                    </SortableContext>
+                </DndContext>
+            </SortingDisabledContext.Provider>
 
             <AgentEditModal
                 open={editModalVisible}

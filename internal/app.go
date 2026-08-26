@@ -204,6 +204,7 @@ func setupApi(app *orz.App, components *AppComponents) error {
 		adminApi.GET("/agents", components.AgentHandler.Paging)
 		adminApi.GET("/agents/statistics", components.AgentHandler.GetStatistics)
 		adminApi.GET("/agents/tags", components.AgentHandler.GetTags)
+		adminApi.PUT("/agents/order", components.AgentHandler.UpdateOrder)
 		adminApi.GET("/agents/:id", components.AgentHandler.GetForAdmin)
 		adminApi.GET("/agents/:id/metrics/latest", components.AgentHandler.GetAdminLatestMetrics)
 		adminApi.PUT("/agents/:id", components.AgentHandler.UpdateInfo)

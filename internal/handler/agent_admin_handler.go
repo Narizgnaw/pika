@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -11,21 +13,20 @@ import (
 	"github.com/labstack/echo/v5"
 	"github.com/pika-monitor/pika/internal/models"
 	"github.com/pika-monitor/pika/internal/protocol"
+	"github.com/pika-monitor/pika/internal/service"
 	"go.uber.org/zap"
 )
 
 func SortAgents(agents []models.Agent) {
-	// 复用排序逻辑
 	slices.SortFunc(agents, func(a, b models.Agent) int {
-		// 先按照状态排序
-		if a.Status != b.Status {
-			return b.Status - a.Status
-		}
-		// 再按权重排序（数字越大越靠前）
+		// 拖动排序生成的权重优先，保证管理员设置的全局顺序不会被在线状态打乱。
 		if a.Weight != b.Weight {
-			return b.Weight - a.Weight
+			return cmp.Compare(b.Weight, a.Weight)
 		}
-		// 权重相同时按名称排序
+		// 兼容尚未生成唯一权重的历史数据。
+		if a.Status != b.Status {
+			return cmp.Compare(b.Status, a.Status)
+		}
 		return strings.Compare(a.Name, b.Name)
 	})
 }
@@ -144,7 +145,7 @@ func (h *AgentHandler) ListAuditResults(c *echo.Context) error {
 	})
 }
 
-// UpdateInfo 更新探针信息（名称、标签、到期时间、可见性、权重、备注）
+// UpdateInfo 更新探针信息（名称、标签、到期时间、可见性、备注）
 func (h *AgentHandler) UpdateInfo(c *echo.Context) error {
 	agentID := c.Param("id")
 
@@ -153,7 +154,6 @@ func (h *AgentHandler) UpdateInfo(c *echo.Context) error {
 		Tags       []string `json:"tags"`
 		ExpireTime int64    `json:"expireTime"`
 		Visibility string   `json:"visibility"`
-		Weight     int      `json:"weight"`
 		Remark     string   `json:"remark"`
 	}
 	if err := c.Bind(&req); err != nil {
@@ -170,7 +170,6 @@ func (h *AgentHandler) UpdateInfo(c *echo.Context) error {
 	agent.Tags = req.Tags
 	agent.ExpireTime = req.ExpireTime
 	agent.Visibility = req.Visibility
-	agent.Weight = req.Weight
 	agent.Remark = req.Remark
 	agent.UpdatedAt = time.Now().UnixMilli()
 
@@ -179,6 +178,27 @@ func (h *AgentHandler) UpdateInfo(c *echo.Context) error {
 	}
 
 	return orz.Ok(c, orz.Map{})
+}
+
+// UpdateOrder 更新探针的全局展示顺序。
+func (h *AgentHandler) UpdateOrder(c *echo.Context) error {
+	var req struct {
+		AgentIDs []string `json:"agentIds"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return orz.NewError(400, "请求参数错误")
+	}
+
+	if err := h.agentService.UpdateAgentOrder(c.Request().Context(), req.AgentIDs); err != nil {
+		if errors.Is(err, service.ErrInvalidAgentOrder) {
+			return orz.NewError(400, err.Error())
+		}
+		return err
+	}
+
+	return orz.Ok(c, orz.Map{
+		"message": "探针排序更新成功",
+	})
 }
 
 // GetStatistics 获取探针统计数据

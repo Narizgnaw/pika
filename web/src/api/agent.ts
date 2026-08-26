@@ -448,16 +448,26 @@ export const updateAgentName = (agentId: string, name: string) => {
     return put(`/admin/agents/${agentId}/name`, {name});
 };
 
-// 更新探针信息（名称、标签、到期时间、可见性）
+// 更新探针信息（排序通过独立的拖动排序接口维护）
 export interface UpdateAgentInfoRequest {
     name?: string;
     tags?: string[];
     expireTime?: number;
     visibility?: string;
+    remark?: string;
 }
 
 export const updateAgentInfo = (agentId: string, data: UpdateAgentInfoRequest) => {
     return put(`/admin/agents/${agentId}`, data);
+};
+
+export interface UpdateAgentOrderResponse {
+    message: string;
+}
+
+// 按从前到后的顺序更新全部探针。
+export const updateAgentOrder = (agentIds: string[]) => {
+    return put<UpdateAgentOrderResponse>('/admin/agents/order', {agentIds});
 };
 
 // 获取探针统计数据

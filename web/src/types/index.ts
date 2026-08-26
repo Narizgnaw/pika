@@ -28,7 +28,7 @@ export interface Agent {
     expireTime?: number;     // 到期时间（时间戳毫秒）
     status: number;
     visibility?: string;     // 可见性: public-匿名可见, private-登录可见
-    weight?: number;         // 权重排序（数字越大越靠前）
+    weight?: number;         // 展示顺序（由拖动排序维护）
     remark?: string;         // 备注信息
     lastSeenAt: string | number;  // 支持字符串或时间戳
     createdAt?: string;

@@ -6,3 +6,4 @@
 - 需要 Tailwind 布局或视觉样式时，在 Ant Design 组件外层包裹原生 `div`、`span` 等元素，并将 Tailwind `className` 放在这些原生元素上。
 - 需要调整 Ant Design 组件本身时，优先使用组件自身的 props、`style`、`styles`、`classNames`、设计 Token，或 Ant Design 的 `Flex`、`Space`、`Row`、`Col` 等布局组件。
 - 如果一个样式同时涉及 Ant Design 组件外部布局和组件内部外观，将两者分开：外部布局由包裹元素承担，组件内部外观由 Ant Design API 承担。
+- 使用 Ant Design 组件时，必须参考 https://ant.design/llms.txt 中的最新文档，不要使用已废弃的 API 或过时写法。

@@ -1,5 +1,5 @@
 import {useEffect} from 'react';
-import {App, DatePicker, Form, Input, InputNumber, Modal, Select} from 'antd';
+import {App, DatePicker, Form, Input, Modal, Select} from 'antd';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import {getAgentForAdmin, updateAgentInfo} from '@/api/agent.ts';
@@ -55,7 +55,6 @@ const AgentEditModal = ({open, agentId, existingTags, onCancel, onSuccess}: Agen
             tags: agent.tags || [],
             expireTime: agent.expireTime ? dayjs(agent.expireTime) : null,
             visibility: agent.visibility || 'public',
-            weight: agent.weight ?? 0,
             remark: agent.remark ?? '',
         });
     }, [open, isEditMode, agent, form]);
@@ -84,7 +83,6 @@ const AgentEditModal = ({open, agentId, existingTags, onCancel, onSuccess}: Agen
                 name: values.name,
                 visibility: values.visibility || 'public',
                 tags: values.tags || [],
-                weight: values.weight || 0,
                 remark: values.remark || '',
             };
 
@@ -154,19 +152,6 @@ const AgentEditModal = ({open, agentId, existingTags, onCancel, onSuccess}: Agen
                             {label: '匿名可见', value: 'public'},
                             {label: '登录可见', value: 'private'},
                         ]}
-                    />
-                </Form.Item>
-                <Form.Item
-                    label="权重排序"
-                    name="weight"
-                    extra="数字越大排序越靠前，默认为0"
-                >
-                    <InputNumber
-                        min={0}
-                        step={1}
-                        precision={0}
-                        placeholder="请输入权重"
-                        style={{width: '100%'}}
                     />
                 </Form.Item>
                 <Form.Item

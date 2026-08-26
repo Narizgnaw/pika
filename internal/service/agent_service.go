@@ -29,6 +29,9 @@ type AgentService struct {
 	geoipService      *GeoIPService
 }
 
+// ErrInvalidAgentOrder 表示提交的排序列表无法完整、唯一地对应当前探针列表。
+var ErrInvalidAgentOrder = errors.New("无效的探针排序")
+
 func NewAgentService(logger *zap.Logger, db *gorm.DB, apiKeyService *ApiKeyService, metricService *MetricService, geoipService *GeoIPService) *AgentService {
 	return &AgentService{
 		logger:            logger,
@@ -160,6 +163,51 @@ func (s *AgentService) GetAgent(ctx context.Context, agentID string) (*models.Ag
 // ListAgents 列出所有探针
 func (s *AgentService) ListAgents(ctx context.Context) ([]models.Agent, error) {
 	return s.AgentRepo.FindAll(ctx)
+}
+
+// UpdateAgentOrder 按从前到后的 ID 顺序重新分配探针权重。
+// 请求必须包含当前全部探针，避免筛选状态下排序时意外覆盖未展示探针的相对顺序。
+func (s *AgentService) UpdateAgentOrder(ctx context.Context, agentIDs []string) error {
+	if len(agentIDs) == 0 {
+		return fmt.Errorf("%w: 探针ID列表不能为空", ErrInvalidAgentOrder)
+	}
+
+	agents, err := s.AgentRepo.FindAll(ctx)
+	if err != nil {
+		return err
+	}
+	if len(agentIDs) != len(agents) {
+		return fmt.Errorf("%w: 排序列表必须包含全部探针", ErrInvalidAgentOrder)
+	}
+
+	existingIDs := make(map[string]struct{}, len(agents))
+	for _, agent := range agents {
+		existingIDs[agent.ID] = struct{}{}
+	}
+
+	seenIDs := make(map[string]struct{}, len(agentIDs))
+	for _, agentID := range agentIDs {
+		if _, exists := existingIDs[agentID]; !exists {
+			return fmt.Errorf("%w: 探针 %q 不存在", ErrInvalidAgentOrder, agentID)
+		}
+		if _, duplicated := seenIDs[agentID]; duplicated {
+			return fmt.Errorf("%w: 探针 %q 重复", ErrInvalidAgentOrder, agentID)
+		}
+		seenIDs[agentID] = struct{}{}
+	}
+
+	now := time.Now().UnixMilli()
+	return s.Transaction(ctx, func(ctx context.Context) error {
+		for index, agentID := range agentIDs {
+			if err := s.AgentRepo.UpdateColumnsById(ctx, agentID, map[string]interface{}{
+				"weight":     len(agentIDs) - index,
+				"updated_at": now,
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // ListOnlineAgents 列出所有在线探针
