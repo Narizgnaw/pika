@@ -177,7 +177,7 @@ func (r *AgentRepo) DeleteAuditResults(ctx context.Context, agentID string) erro
 func (r *AgentRepo) FindPublicAgents(ctx context.Context) ([]models.Agent, error) {
 	var agents []models.Agent
 	err := r.db.WithContext(ctx).
-		Where("visibility = ?", "public").
+		Where("visibility = ? AND enabled = ?", "public", true).
 		Find(&agents).Error
 	return agents, err
 }
@@ -186,7 +186,7 @@ func (r *AgentRepo) FindPublicAgents(ctx context.Context) ([]models.Agent, error
 func (r *AgentRepo) FindPublicAgentByID(ctx context.Context, id string) (*models.Agent, error) {
 	var agent models.Agent
 	err := r.db.WithContext(ctx).
-		Where("id = ? AND visibility = ?", id, "public").
+		Where("id = ? AND visibility = ? AND enabled = ?", id, "public", true).
 		First(&agent).Error
 	if err != nil {
 		return nil, err
@@ -217,7 +217,7 @@ func (r *AgentRepo) FindByShortID(ctx context.Context, shortID string) (models.A
 func (r *AgentRepo) FindPublicAgentByShortID(ctx context.Context, shortID string) (*models.Agent, error) {
 	var agents []models.Agent
 	err := r.db.WithContext(ctx).
-		Where("id LIKE ? AND visibility = ?", shortID+"-%", "public").
+		Where("id LIKE ? AND visibility = ? AND enabled = ?", shortID+"-%", "public", true).
 		Limit(2).
 		Find(&agents).Error
 	if err != nil {

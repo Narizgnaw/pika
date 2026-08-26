@@ -79,3 +79,32 @@ func TestDisabledAgentStatusCannotBeRefreshed(t *testing.T) {
 		t.Fatalf("disabled agent status changed unexpectedly: enabled=%v status=%d", saved.Enabled, saved.Status)
 	}
 }
+
+func TestPublicAgentQueriesExcludeDisabledAgents(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := database.AutoMigrate(&models.Agent{}); err != nil {
+		t.Fatalf("migrate agent: %v", err)
+	}
+
+	agents := []models.Agent{
+		{ID: "public-enabled", Enabled: true, Visibility: "public"},
+		{ID: "public-disabled", Enabled: true, Visibility: "public"},
+	}
+	if err := database.Create(&agents).Error; err != nil {
+		t.Fatalf("create agents: %v", err)
+	}
+	if err := database.Model(&models.Agent{}).Where("id = ?", "public-disabled").Update("enabled", false).Error; err != nil {
+		t.Fatalf("disable agent: %v", err)
+	}
+
+	publicAgents, err := repo.NewAgentRepo(database).FindPublicAgents(context.Background())
+	if err != nil {
+		t.Fatalf("query public agents: %v", err)
+	}
+	if len(publicAgents) != 1 || publicAgents[0].ID != "public-enabled" {
+		t.Fatalf("unexpected public agents: %+v", publicAgents)
+	}
+}
