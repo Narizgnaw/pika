@@ -4,7 +4,7 @@ import {Link, useNavigate} from 'react-router-dom';
 import type {MenuProps} from 'antd';
 import {App, Button, Dropdown, Form, Input, Select, Space, Tag} from 'antd';
 import type {ColumnsType} from 'antd/es/table';
-import {Edit, Eye, EyeOff, FileWarning, GripVertical, Lock, MoreVertical, Play, Plus, PowerOff, RefreshCw, Shield, Tags, Trash2} from 'lucide-react';
+import {Activity, Edit, Eye, EyeOff, FileWarning, GripVertical, Lock, MoreVertical, Play, Plus, PowerOff, RefreshCw, Shield, Tags, Trash2} from 'lucide-react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import type {DragEndEvent} from '@dnd-kit/core';
 import {DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors} from '@dnd-kit/core';
@@ -28,6 +28,7 @@ import BatchTagsModal from './BatchTagsModal';
 import BatchTamperProtectionModal from './BatchTamperProtectionModal';
 import BatchSSHLoginConfigModal from './BatchSSHLoginConfigModal';
 import BatchVisibilityModal from './BatchVisibilityModal';
+import BatchTrafficStatsModal from './BatchTrafficStatsModal';
 
 type SortableRowHook = ReturnType<typeof useSortable>;
 
@@ -103,6 +104,7 @@ const AgentList = () => {
     const [batchTamperModalVisible, setBatchTamperModalVisible] = useState(false);
     const [batchSSHModalVisible, setBatchSSHModalVisible] = useState(false);
     const [batchVisibilityModalVisible, setBatchVisibilityModalVisible] = useState(false);
+    const [batchTrafficModalVisible, setBatchTrafficModalVisible] = useState(false);
     const [editingAgentId, setEditingAgentId] = useState<string | undefined>(undefined);
 
     // 过滤条件
@@ -277,6 +279,14 @@ const AgentList = () => {
             return;
         }
         setBatchVisibilityModalVisible(true);
+    };
+
+    const handleBatchTrafficConfig = () => {
+        if (selectedRowKeys.length === 0) {
+            messageApi.warning('请先选择要操作的探针');
+            return;
+        }
+        setBatchTrafficModalVisible(true);
     };
 
     // 前端过滤数据
@@ -635,6 +645,7 @@ const AgentList = () => {
     const batchMenuItems: MenuProps['items'] = [
         {key: 'tags', icon: <Tags size={15}/>, label: '修改标签', onClick: handleBatchTags},
         {key: 'visibility', icon: <EyeOff size={15}/>, label: '修改可见性', onClick: handleBatchVisibility},
+        {key: 'traffic', icon: <Activity size={15}/>, label: '配置流量统计', onClick: handleBatchTrafficConfig},
         {key: 'tamper', icon: <FileWarning size={15}/>, label: '配置防篡改保护', onClick: handleBatchTamperConfig},
         {key: 'ssh', icon: <Lock size={15}/>, label: '配置 SSH 登录监控', onClick: handleBatchSSHConfig},
     ];
@@ -813,6 +824,16 @@ const AgentList = () => {
                 onCancel={() => setBatchVisibilityModalVisible(false)}
                 onSuccess={() => {
                     setBatchVisibilityModalVisible(false);
+                    setSelectedRowKeys([]);
+                }}
+            />
+
+            <BatchTrafficStatsModal
+                open={batchTrafficModalVisible}
+                agentIds={selectedRowKeys as string[]}
+                onCancel={() => setBatchTrafficModalVisible(false)}
+                onSuccess={() => {
+                    setBatchTrafficModalVisible(false);
                     setSelectedRowKeys([]);
                 }}
             />
