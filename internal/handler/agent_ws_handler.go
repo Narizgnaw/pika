@@ -38,11 +38,12 @@ func (h *AgentHandler) HandleWebSocket(c *echo.Context) error {
 		return err
 	}
 
-	defer func() {
-		h.markAgentOffline(agent.ID)
-	}()
+	// 同步探针会话：BootID 变化（探针重启）时重置确认位点，
+	// 再把当前位点随注册响应返回
+	h.wsManager.BeginAgentSession(agent.ID, registerReq.BootID)
 
-	// 发送注册成功响应
+	// 发送注册成功响应：声明可靠投递支持，并回传该探针的累计确认
+	// 位点，探针据此跳过已处理消息、只重放未确认部分
 	if err := h.sendRegisterSuccess(conn, agent.ID); err != nil {
 		h.logger.Error("failed to send register ack", zap.Error(err))
 		conn.Close()
@@ -71,6 +72,12 @@ func (h *AgentHandler) HandleWebSocket(c *echo.Context) error {
 	client := h.newClient(agent.ID, conn)
 
 	h.wsManager.Register(client)
+
+	// 连接结束后标记离线；若探针已由新连接替换则跳过，避免旧连接的
+	// 退出把新连接打成离线
+	defer func() {
+		h.markAgentOffline(client)
+	}()
 
 	// 启动读写协程
 	go client.WritePump()
@@ -152,27 +159,41 @@ func (h *AgentHandler) readRegisterRequest(conn *websocket.Conn) (*protocol.Regi
 	return &registerReq, nil
 }
 
-func (h *AgentHandler) markAgentOffline(agentID string) {
-	_ = h.agentService.UpdateAgentStatus(context.Background(), agentID, 0)
+func (h *AgentHandler) markAgentOffline(client *ws.Client) {
+	// 探针已由新连接替换时跳过：离线状态由新连接的活跃心跳管理
+	if cur, ok := h.wsManager.GetClient(client.ID); ok && cur != client {
+		return
+	}
+	_ = h.agentService.UpdateAgentStatus(context.Background(), client.ID, 0)
 }
 
 func (h *AgentHandler) newClient(agentID string, conn *websocket.Conn) *ws.Client {
 	return &ws.Client{
 		ID:         agentID,
 		Conn:       conn,
-		Send:       make(chan []byte, 256),
+		Send:       make(chan []byte, 512),
 		Manager:    h.wsManager,
 		LastActive: time.Now(),
 	}
 }
 
-func (h *AgentHandler) handleWebSocketPong(agentID string) {
+// pongStatusRefreshInterval 在线状态心跳刷新间隔：本连接首次 pong 立即
+// 写库，之后按该间隔周期性刷新，避免每个 pong（10s/探针）都打数据库
+const pongStatusRefreshInterval = 5 * time.Minute
+
+func (h *AgentHandler) handleWebSocketPong(client *ws.Client) {
+	if !client.ShouldWriteStatus(pongStatusRefreshInterval) {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := h.agentService.UpdateAgentStatus(ctx, agentID, 1); err != nil {
-		h.logger.Warn("failed to update agent status on pong", zap.String("agentID", agentID), zap.Error(err))
+	if err := h.agentService.UpdateAgentStatus(ctx, client.ID, 1); err != nil {
+		h.logger.Warn("failed to update agent status on pong", zap.String("agentID", client.ID), zap.Error(err))
+		return
 	}
+	client.MarkStatusWritten()
 }
 
 func (h *AgentHandler) handleMetricsMessage(ctx context.Context, agentID string, data json.RawMessage) error {
@@ -260,8 +281,10 @@ func (h *AgentHandler) handleTamperProtectMessage(ctx context.Context, agentID s
 // sendRegisterSuccess 发送注册成功响应
 func (h *AgentHandler) sendRegisterSuccess(conn *websocket.Conn, agentID string) error {
 	resp := protocol.RegisterResponse{
-		AgentID: agentID,
-		Status:  "success",
+		AgentID:  agentID,
+		Status:   "success",
+		Reliable: true,
+		AckSeq:   h.wsManager.AckSeq(agentID),
 	}
 	return conn.WriteJSON(protocol.OutboundMessage{
 		Type: protocol.MessageTypeRegisterAck,

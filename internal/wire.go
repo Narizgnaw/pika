@@ -103,17 +103,21 @@ type AppComponents struct {
 
 // provideVMClient 提供 VictoriaMetrics 客户端
 func provideVMClient(cfg *config.AppConfig, logger *zap.Logger) *vmclient.VMClient {
+	// 写入超时默认 10s：VM 抖动时快速失败，未确认消息由探针重放
+	// 机制兜底，避免 30s 级别的停滞阻塞探针消息的串行处理
+	const defaultWriteTimeout = 10 * time.Second
+
 	// 检查配置
 	if cfg.VictoriaMetrics == nil || !cfg.VictoriaMetrics.Enabled {
 		logger.Info("VictoriaMetrics is not enabled, using default configuration")
 		// 返回一个默认配置的客户端（用于本地开发）
-		return vmclient.NewVMClient("http://localhost:8428", 30*time.Second, 60*time.Second)
+		return vmclient.NewVMClient("http://localhost:8428", defaultWriteTimeout, 60*time.Second)
 	}
 
 	// 使用配置创建客户端
 	writeTimeout := time.Duration(cfg.VictoriaMetrics.WriteTimeout) * time.Second
 	if writeTimeout == 0 {
-		writeTimeout = 30 * time.Second
+		writeTimeout = defaultWriteTimeout
 	}
 
 	queryTimeout := time.Duration(cfg.VictoriaMetrics.QueryTimeout) * time.Second

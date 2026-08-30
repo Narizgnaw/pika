@@ -23,26 +23,28 @@ func TestHandleWebSocketMessageIgnoresDisabledAgent(t *testing.T) {
 		t.Fatalf("migrate agent: %v", err)
 	}
 
-	agent := models.Agent{ID: "agent-disabled", Enabled: true}
-	if err := database.Create(&agent).Error; err != nil {
-		t.Fatalf("create agent: %v", err)
-	}
-	if err := database.Model(&models.Agent{}).Where("id = ?", agent.ID).Update("enabled", false).Error; err != nil {
-		t.Fatalf("disable agent: %v", err)
-	}
-
 	h := &AgentHandler{
 		logger: zap.NewNop(),
 		agentService: &service.AgentService{
 			AgentRepo: repo.NewAgentRepo(database),
 		},
 	}
+
+	agent := models.Agent{ID: "agent-disabled", Enabled: true}
+	if err := database.Create(&agent).Error; err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	// 通过服务层切换启用状态，保证 IsAgentEnabled 的缓存被正确失效
+	if err := h.agentService.UpdateAgentEnabled(context.Background(), agent.ID, false); err != nil {
+		t.Fatalf("disable agent: %v", err)
+	}
+
 	invalidMetrics := json.RawMessage(`{`)
 	if err := h.handleWebSocketMessage(context.Background(), agent.ID, string(protocol.MessageTypeMetrics), invalidMetrics); err != nil {
 		t.Fatalf("disabled agent data should be ignored, got error: %v", err)
 	}
 
-	if err := database.Model(&models.Agent{}).Where("id = ?", agent.ID).Update("enabled", true).Error; err != nil {
+	if err := h.agentService.UpdateAgentEnabled(context.Background(), agent.ID, true); err != nil {
 		t.Fatalf("enable agent: %v", err)
 	}
 	if err := h.handleWebSocketMessage(context.Background(), agent.ID, string(protocol.MessageTypeMetrics), invalidMetrics); err == nil {

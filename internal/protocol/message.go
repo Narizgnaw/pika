@@ -6,18 +6,25 @@ import "encoding/json"
 type InputMessage struct {
 	Type MessageType     `json:"type"`
 	Data json.RawMessage `json:"data"`
+	Seq  uint64          `json:"seq,omitempty"` // 可靠投递序号（agent→server 事件流，0 表示不参与）
 }
 
 // OutboundMessage WebSocket 出站消息结构
 type OutboundMessage struct {
 	Type MessageType `json:"type"`
 	Data interface{} `json:"data"`
+	Seq  uint64      `json:"seq,omitempty"` // 可靠投递序号（agent→server 事件流，0 表示不参与）
 }
 
 // RegisterRequest 注册请求
 type RegisterRequest struct {
 	AgentInfo AgentInfo `json:"agentInfo"`
 	ApiKey    string    `json:"apiKey"`
+	// BootID 探针进程级会话标识（每次进程启动重新生成）。服务端据此
+	// 识别探针重启：纯内存事件队列重启后 seq 从 1 重新分配，必须重置
+	// 该探针的累计确认位点，否则新消息会被旧位点误判为重复而丢弃。
+	// 旧版探针不携带该字段。
+	BootID string `json:"bootId,omitempty"`
 }
 
 // RegisterResponse 注册响应
@@ -25,6 +32,16 @@ type RegisterResponse struct {
 	AgentID string `json:"agentId"`
 	Status  string `json:"status"`
 	Message string `json:"message,omitempty"`
+	// Reliable 表示服务端支持可靠投递（seq 去重 + ack 确认）。
+	// 旧版服务端不返回该字段，探针应降级为直接发送。
+	Reliable bool `json:"reliable,omitempty"`
+	// AckSeq 服务端已处理该探针事件流的最高序号，探针据此跳过已确认消息
+	AckSeq uint64 `json:"ackSeq,omitempty"`
+}
+
+// AckData 可靠投递累计确认：seq 及之前的所有事件流消息已被服务端处理
+type AckData struct {
+	Seq uint64 `json:"seq"`
 }
 
 // AgentInfo 探针信息
@@ -62,6 +79,8 @@ const (
 	// 指标消息（批量）
 	MessageTypeMetrics       MessageType = "metrics"
 	MessageTypeMonitorConfig MessageType = "monitor_config"
+	// 可靠投递确认（server→agent，累计确认事件流处理进度）
+	MessageTypeAck MessageType = "ack"
 	// 防篡改消息
 	MessageTypeTamperProtect MessageType = "tamper_protect"
 	MessageTypeTamperEvent   MessageType = "tamper_event"

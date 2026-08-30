@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pika-monitor/pika/internal/protocol"
@@ -22,6 +23,7 @@ import (
 	"github.com/pika-monitor/pika/pkg/agent/tamper"
 	"github.com/pika-monitor/pika/pkg/version"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/jpillora/backoff"
 	"github.com/sourcegraph/conc"
@@ -32,6 +34,10 @@ const (
 	agentPongWait       = 30 * time.Second
 	agentWriteWait      = 5 * time.Second
 	agentCollectTimeout = 30 * time.Second
+	// agentDataWriteWait 数据帧写入超时。没有超时的写在对端停止读取
+	// （网络劣化、服务端处理阻塞）时会无限阻塞并持有连接写锁，
+	// 期间采集快照被覆盖造成静默丢数据。
+	agentDataWriteWait = 10 * time.Second
 )
 
 // safeConn 线程安全的 WebSocket 连接包装器
@@ -40,17 +46,23 @@ type safeConn struct {
 	mu   sync.Mutex
 }
 
-// WriteJSON 线程安全地写入 JSON 消息
+// WriteJSON 线程安全地写入 JSON 消息（带写超时）
 func (sc *safeConn) WriteJSON(v interface{}) error {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
+	if err := sc.conn.SetWriteDeadline(time.Now().Add(agentDataWriteWait)); err != nil {
+		return err
+	}
 	return sc.conn.WriteJSON(v)
 }
 
-// WriteMessage 线程安全地写入消息
+// WriteMessage 线程安全地写入消息（带写超时）
 func (sc *safeConn) WriteMessage(messageType int, data []byte) error {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
+	if err := sc.conn.SetWriteDeadline(time.Now().Add(agentDataWriteWait)); err != nil {
+		return err
+	}
 	return sc.conn.WriteMessage(messageType, data)
 }
 
@@ -75,12 +87,15 @@ func (sc *safeConn) WriteControl(messageType int, data []byte, deadline time.Tim
 type Agent struct {
 	cfg              *config.Config
 	idMgr            *id.Manager
+	bootID           string
 	cancel           context.CancelFunc
 	connMu           sync.RWMutex
 	activeConn       *safeConn
 	collectorMu      sync.RWMutex
 	collectorManager *collector.Manager
 	metricsStore     *metricsStore
+	outbox           *outbox
+	reliable         atomic.Bool
 	tamperProtector  *tamper.Protector
 	sshMonitor       *sshmonitor.Monitor
 }
@@ -90,8 +105,10 @@ func New(cfg *config.Config) *Agent {
 	return &Agent{
 		cfg:              cfg,
 		idMgr:            id.NewManager(),
+		bootID:           uuid.NewString(),
 		collectorManager: collector.NewManager(cfg),
 		metricsStore:     newMetricsStore(),
+		outbox:           newOutbox(),
 		tamperProtector:  tamper.NewProtector(),
 		sshMonitor:       sshmonitor.NewMonitor(),
 	}
@@ -201,7 +218,8 @@ func (a *Agent) runOnce(ctx context.Context, onRegistered func()) error {
 	})
 
 	// 发送注册消息
-	if err := a.registerAgent(conn); err != nil {
+	registerResp, err := a.registerAgent(conn)
+	if err != nil {
 		return fmt.Errorf("register failed: %w", err)
 	}
 	onRegistered()
@@ -212,6 +230,12 @@ func (a *Agent) runOnce(ctx context.Context, onRegistered func()) error {
 	// 重置发送游标，使下一个 sendLoop tick 立即发送当前全量快照，
 	// 保证重连瞬间服务端就能拿到最新数据
 	a.metricsStore.reset()
+	// 服务端声明支持可靠投递时，事件类消息改走 outbox；注册响应携带的
+	// 累计确认位点先修剪队列，避免重放服务端已处理的消息
+	a.reliable.Store(registerResp.Reliable)
+	if registerResp.Reliable && registerResp.AckSeq > 0 {
+		a.outbox.ack(registerResp.AckSeq)
+	}
 	defer func() {
 		a.setActiveConn(nil)
 	}()
@@ -242,6 +266,13 @@ func (a *Agent) runOnce(ctx context.Context, onRegistered func()) error {
 			}
 		}
 	})
+
+	// 事件类消息可靠发送（仅服务端支持时启用）
+	if registerResp.Reliable {
+		wg.Go(func() {
+			a.eventSendLoop(done, conn)
+		})
+	}
 
 	// 启动防篡改事件监控
 	wg.Go(func() {
@@ -321,6 +352,8 @@ func (a *Agent) readLoop(conn *websocket.Conn, done chan struct{}) error {
 			go a.handleSSHLoginConfig(msg.Data)
 		case protocol.MessageTypeUninstall:
 			go a.handleUninstall()
+		case protocol.MessageTypeAck:
+			a.handleAck(msg.Data)
 		default:
 			// 忽略其他类型
 		}
@@ -345,12 +378,14 @@ func (a *Agent) pingLoop(ctx context.Context, conn *safeConn, done chan struct{}
 	}
 }
 
-// registerAgent 注册探针
-func (a *Agent) registerAgent(conn *safeConn) error {
+// registerAgent 注册探针，返回服务端的注册响应（含可靠投递协商结果）
+func (a *Agent) registerAgent(conn *safeConn) (protocol.RegisterResponse, error) {
+	var registerResp protocol.RegisterResponse
+
 	// 加载或生成探针 ID
 	agentID, err := a.idMgr.Load()
 	if err != nil {
-		return fmt.Errorf("load agent ID failed: %w", err)
+		return registerResp, fmt.Errorf("load agent ID failed: %w", err)
 	}
 	slog.Info("Agent ID", "id", agentID, "path", a.idMgr.GetPath())
 
@@ -366,7 +401,8 @@ func (a *Agent) registerAgent(conn *safeConn) error {
 		agentName = hostname
 	}
 
-	// 构建注册请求
+	// 构建注册请求（BootID 标识本次探针进程，服务端据此识别重启并
+	// 重置事件流确认位点——纯内存 outbox 重启后 seq 从 1 重新分配）
 	registerReq := protocol.RegisterRequest{
 		AgentInfo: protocol.AgentInfo{
 			ID:       agentID,
@@ -377,41 +413,82 @@ func (a *Agent) registerAgent(conn *safeConn) error {
 			Version:  GetVersion(),
 		},
 		ApiKey: a.cfg.Server.APIKey,
+		BootID: a.bootID,
 	}
 
 	if err := conn.WriteJSON(protocol.OutboundMessage{
 		Type: protocol.MessageTypeRegister,
 		Data: registerReq,
 	}); err != nil {
-		return fmt.Errorf("send register message failed: %w", err)
+		return registerResp, fmt.Errorf("send register message failed: %w", err)
 	}
 
 	// 读取注册响应
 	var response protocol.InputMessage
 	if err := conn.ReadJSON(&response); err != nil {
-		return fmt.Errorf("read register response failed: %w", err)
+		return registerResp, fmt.Errorf("read register response failed: %w", err)
 	}
 
 	// 检查响应类型
 	if response.Type == protocol.MessageTypeRegisterErr {
 		var errResp protocol.RegisterResponse
 		if err := json.Unmarshal(response.Data, &errResp); err == nil {
-			return fmt.Errorf("register failed: %s", errResp.Message)
+			return registerResp, fmt.Errorf("register failed: %s", errResp.Message)
 		}
-		return fmt.Errorf("register failed: unknown error")
+		return registerResp, fmt.Errorf("register failed: unknown error")
 	}
 
 	if response.Type != protocol.MessageTypeRegisterAck {
-		return fmt.Errorf("register failed: unexpected response type %s", response.Type)
+		return registerResp, fmt.Errorf("register failed: unexpected response type %s", response.Type)
 	}
 
-	var registerResp protocol.RegisterResponse
 	if err := json.Unmarshal(response.Data, &registerResp); err != nil {
-		return fmt.Errorf("parse register response failed: %w", err)
+		return registerResp, fmt.Errorf("parse register response failed: %w", err)
 	}
 
-	slog.Info("注册成功", "agentId", registerResp.AgentID, "status", registerResp.Status)
-	return nil
+	slog.Info("注册成功", "agentId", registerResp.AgentID, "status", registerResp.Status,
+		"reliable", registerResp.Reliable, "serverAckSeq", registerResp.AckSeq)
+	return registerResp, nil
+}
+
+// handleAck 处理服务端的累计确认，修剪已投递的事件消息
+func (a *Agent) handleAck(data json.RawMessage) {
+	var ack protocol.AckData
+	if err := json.Unmarshal(data, &ack); err != nil {
+		slog.Warn("解析投递确认失败", "error", err)
+		return
+	}
+	a.outbox.ack(ack.Seq)
+}
+
+// eventSendLoop 事件类消息的可靠发送循环（每个连接一个）。
+// 连接建立后先从队头重放全部未确认消息（服务端按 seq 去重），之后增量
+// 发送新入队的消息；写失败直接返回并断开连接，未确认消息留给下一个
+// 连接重放。
+func (a *Agent) eventSendLoop(done chan struct{}, conn *safeConn) {
+	var lastSent uint64
+	for {
+		for _, msg := range a.outbox.after(lastSent) {
+			if err := conn.WriteJSON(msg); err != nil {
+				slog.Warn("事件消息发送失败，等待重连后重放", "error", err, "seq", msg.Seq)
+				a.killConn(conn)
+				return
+			}
+			lastSent = msg.Seq
+		}
+		if !a.outbox.wait(done) {
+			return
+		}
+	}
+}
+
+// killConn 写失败时立即关闭连接，让读循环马上感知并触发重连，而不是
+// 等 30 秒 pong 超时。Close 可安全并发调用，会以错误唤醒阻塞中的读写。
+func (a *Agent) killConn(conn *safeConn) {
+	if conn == nil {
+		return
+	}
+	_ = conn.Close()
 }
 
 func (a *Agent) handleMonitorConfig(data json.RawMessage) {
@@ -434,21 +511,16 @@ func (a *Agent) handleMonitorConfig(data json.RawMessage) {
 
 	slog.Info("收到服务监控配置，立即执行检测", "count", len(payload.Items))
 
-	// 立即执行一次监控检测，结果以单元素 batch 上报
+	// 立即执行一次监控检测，结果以单元素 batch 上报。
+	// 走 sendOutboundMessage（可靠模式下进 outbox），断线期间不丢
 	sample := manager.CollectMonitor(payload.Items)
-	conn := a.getActiveConn()
-	if conn == nil {
-		slog.Warn("当前连接不可用，无法上报监控结果")
-		return
-	}
-
-	if err := conn.WriteJSON(protocol.OutboundMessage{
+	if err := a.sendOutboundMessage(protocol.OutboundMessage{
 		Type: protocol.MessageTypeMetrics,
 		Data: protocol.MetricsBatch{Samples: []protocol.MetricSample{sample}},
 	}); err != nil {
 		slog.Warn("发送监控结果失败", "error", err)
 	} else {
-		slog.Info("服务监控检测完成，已上报监控项结果", "count", len(payload.Items))
+		slog.Info("服务监控检测完成，已提交监控项结果", "count", len(payload.Items))
 	}
 }
 
@@ -464,13 +536,22 @@ func (a *Agent) getActiveConn() *safeConn {
 	return a.activeConn
 }
 
+// sendOutboundMessage 发送事件类出站消息。服务端支持可靠投递时入队
+// outbox，由专用协程发送并等待服务端确认，断线期间不丢；否则降级为
+// 直接发送（与旧服务端兼容）。
 func (a *Agent) sendOutboundMessage(msg protocol.OutboundMessage) error {
+	if a.reliable.Load() {
+		a.outbox.enqueue(msg)
+		return nil
+	}
+
 	conn := a.getActiveConn()
 	if conn == nil {
 		return fmt.Errorf("connection is unavailable")
 	}
 
 	if err := conn.WriteJSON(msg); err != nil {
+		a.killConn(conn)
 		return err
 	}
 
@@ -571,7 +652,9 @@ func (a *Agent) sendMetricsOnce() {
 		Data: protocol.MetricsBatch{Samples: samples},
 	}); err != nil {
 		slog.Warn("发送指标 batch 失败", "error", err)
-		// 连接写失败仅用于日志，重连由 readLoop/pingLoop 驱动
+		// 写失败说明连接已不可用，主动断开让读循环立刻触发重连；
+		// 未确认样本由 metricsStore 在重连后重发（latest-wins）
+		a.killConn(conn)
 		return
 	}
 

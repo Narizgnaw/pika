@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/go-orz/orz"
@@ -27,7 +28,18 @@ type AgentService struct {
 	apiKeyService     *ApiKeyService
 	metricService     *MetricService
 	geoipService      *GeoIPService
+	// enabledCache IsAgentEnabled 的短 TTL 缓存。该检查位于每条
+	// WebSocket 消息的处理路径上，直连数据库会在探针数多时拖垮处理。
+	enabledCache sync.Map // agentID → enabledCacheEntry
 }
+
+type enabledCacheEntry struct {
+	value     bool
+	expiresAt time.Time
+}
+
+// enabledCacheTTL 探针启用状态缓存时长：禁用操作最迟该时长后生效
+const enabledCacheTTL = 3 * time.Second
 
 // ErrInvalidAgentOrder 表示提交的排序列表无法完整、唯一地对应当前探针列表。
 var ErrInvalidAgentOrder = errors.New("无效的探针排序")
@@ -150,9 +162,26 @@ func (s *AgentService) UpdateAgentStatus(ctx context.Context, agentID string, st
 	return s.AgentRepo.UpdateStatus(ctx, agentID, status, time.Now().UnixMilli())
 }
 
-// IsAgentEnabled 查询探针是否允许接收并处理数据。
+// IsAgentEnabled 查询探针是否允许接收并处理数据（带短 TTL 缓存，
+// 禁用操作会立即失效缓存）。
 func (s *AgentService) IsAgentEnabled(ctx context.Context, agentID string) (bool, error) {
-	return s.AgentRepo.IsEnabled(ctx, agentID)
+	if cached, ok := s.enabledCache.Load(agentID); ok {
+		entry := cached.(enabledCacheEntry)
+		if time.Now().Before(entry.expiresAt) {
+			return entry.value, nil
+		}
+	}
+
+	enabled, err := s.AgentRepo.IsEnabled(ctx, agentID)
+	if err != nil {
+		return false, err
+	}
+
+	s.enabledCache.Store(agentID, enabledCacheEntry{
+		value:     enabled,
+		expiresAt: time.Now().Add(enabledCacheTTL),
+	})
+	return enabled, nil
 }
 
 // UpdateAgentEnabled 更新探针启用状态。禁用时立即标记离线，后续状态更新由仓储层原子拦截。
@@ -168,7 +197,13 @@ func (s *AgentService) UpdateAgentEnabled(ctx context.Context, agentID string, e
 	if !enabled {
 		updates["status"] = 0
 	}
-	return s.AgentRepo.UpdateColumnsById(ctx, agentID, updates)
+	if err := s.AgentRepo.UpdateColumnsById(ctx, agentID, updates); err != nil {
+		return err
+	}
+
+	// 立即失效缓存，让禁用/启用马上对消息处理路径生效
+	s.enabledCache.Delete(agentID)
+	return nil
 }
 
 // UpdatePublicIP 更新探针的公网 IP 信息
