@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -38,13 +39,24 @@ func (h *AgentHandler) HandleWebSocket(c *echo.Context) error {
 		return err
 	}
 
-	// 同步探针会话：BootID 变化（探针重启）时重置确认位点，
-	// 再把当前位点随注册响应返回
-	h.wsManager.BeginAgentSession(agent.ID, registerReq.BootID)
+	// 先原子激活连接及其 BootID 会话，再发送注册响应。这样响应中的
+	// AckSeq 与当前连接属于同一次会话切换，旧连接无法在其间污染位点。
+	client := ws.NewClient(agent.ID, conn, h.wsManager)
+	ackSeq := h.wsManager.Register(client, registerReq.BootID)
+	// RegisterAgent 的在线写入发生在连接切换之前，可能被恰好退出的旧连接
+	// 覆盖；会话激活后再确认一次，确保数据库状态属于 current client。
+	if err := h.agentService.UpdateAgentStatus(context.Background(), agent.ID, 1); err != nil {
+		h.logger.Warn("failed to confirm agent online status", zap.String("agentID", agent.ID), zap.Error(err))
+	}
+	defer func() {
+		if h.wsManager.Unregister(client) {
+			h.markAgentOffline(client.ID)
+		}
+	}()
 
 	// 发送注册成功响应：声明可靠投递支持，并回传该探针的累计确认
 	// 位点，探针据此跳过已处理消息、只重放未确认部分
-	if err := h.sendRegisterSuccess(conn, agent.ID); err != nil {
+	if err := h.sendRegisterSuccess(conn, agent.ID, ackSeq); err != nil {
 		h.logger.Error("failed to send register ack", zap.Error(err))
 		conn.Close()
 		return err
@@ -67,17 +79,6 @@ func (h *AgentHandler) HandleWebSocket(c *echo.Context) error {
 			// 配置下发失败不中断连接，只记录日志
 		}
 	}
-
-	// 创建客户端并注册到管理器
-	client := h.newClient(agent.ID, conn)
-
-	h.wsManager.Register(client)
-
-	// 连接结束后标记离线；若探针已由新连接替换则跳过，避免旧连接的
-	// 退出把新连接打成离线
-	defer func() {
-		h.markAgentOffline(client)
-	}()
 
 	// 启动读写协程
 	go client.WritePump()
@@ -159,22 +160,8 @@ func (h *AgentHandler) readRegisterRequest(conn *websocket.Conn) (*protocol.Regi
 	return &registerReq, nil
 }
 
-func (h *AgentHandler) markAgentOffline(client *ws.Client) {
-	// 探针已由新连接替换时跳过：离线状态由新连接的活跃心跳管理
-	if cur, ok := h.wsManager.GetClient(client.ID); ok && cur != client {
-		return
-	}
-	_ = h.agentService.UpdateAgentStatus(context.Background(), client.ID, 0)
-}
-
-func (h *AgentHandler) newClient(agentID string, conn *websocket.Conn) *ws.Client {
-	return &ws.Client{
-		ID:         agentID,
-		Conn:       conn,
-		Send:       make(chan []byte, 512),
-		Manager:    h.wsManager,
-		LastActive: time.Now(),
-	}
+func (h *AgentHandler) markAgentOffline(agentID string) {
+	_ = h.agentService.UpdateAgentStatus(context.Background(), agentID, 0)
 }
 
 // pongStatusRefreshInterval 在线状态心跳刷新间隔：本连接首次 pong 立即
@@ -189,7 +176,13 @@ func (h *AgentHandler) handleWebSocketPong(client *ws.Client) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := h.agentService.UpdateAgentStatus(ctx, client.ID, 1); err != nil {
+	current, err := h.wsManager.DoIfCurrent(client, func() error {
+		return h.agentService.UpdateAgentStatus(ctx, client.ID, 1)
+	})
+	if !current {
+		return
+	}
+	if err != nil {
 		h.logger.Warn("failed to update agent status on pong", zap.String("agentID", client.ID), zap.Error(err))
 		return
 	}
@@ -199,36 +192,60 @@ func (h *AgentHandler) handleWebSocketPong(client *ws.Client) {
 func (h *AgentHandler) handleMetricsMessage(ctx context.Context, agentID string, data json.RawMessage) error {
 	var batch protocol.MetricsBatch
 	if err := json.Unmarshal(data, &batch); err != nil {
-		return err
+		return ws.Permanent(err)
 	}
 
+	var transientErr error
+	var permanentErr error
 	for _, sample := range batch.Samples {
 		metricsData, err := json.Marshal(sample.Data)
 		if err != nil {
 			h.logger.Warn("failed to marshal metric sample", zap.Error(err))
+			permanentErr = errors.Join(permanentErr, err)
 			continue
 		}
 		if err := h.metricService.HandleMetricData(ctx, agentID, string(sample.Type), metricsData, sample.Timestamp); err != nil {
 			h.logger.Warn("failed to handle metric sample", zap.Error(err), zap.String("type", string(sample.Type)))
+			if isPayloadError(err) {
+				permanentErr = errors.Join(permanentErr, err)
+			} else {
+				transientErr = errors.Join(transientErr, err)
+			}
 			continue
 		}
 	}
-	return nil
+	if transientErr != nil {
+		return transientErr
+	}
+	return ws.Permanent(permanentErr)
 }
 
 func (h *AgentHandler) handleCommandResponseMessage(ctx context.Context, agentID string, data json.RawMessage) error {
 	var cmdResp protocol.CommandResponse
 	if err := json.Unmarshal(data, &cmdResp); err != nil {
-		return err
+		return ws.Permanent(err)
 	}
-	return h.agentService.HandleCommandResponse(ctx, agentID, &cmdResp)
+	return classifyMessageError(h.agentService.HandleCommandResponse(ctx, agentID, &cmdResp))
+}
+
+func isPayloadError(err error) bool {
+	var syntaxErr *json.SyntaxError
+	var typeErr *json.UnmarshalTypeError
+	return errors.As(err, &syntaxErr) || errors.As(err, &typeErr)
+}
+
+func classifyMessageError(err error) error {
+	if isPayloadError(err) {
+		return ws.Permanent(err)
+	}
+	return err
 }
 
 func (h *AgentHandler) handleTamperEventMessage(ctx context.Context, agentID string, data json.RawMessage) error {
 	var eventData protocol.TamperEventData
 	if err := json.Unmarshal(data, &eventData); err != nil {
 		h.logger.Error("failed to unmarshal tamper event", zap.Error(err))
-		return err
+		return ws.Permanent(err)
 	}
 	return h.tamperService.CreateEvent(ctx, agentID, &eventData)
 }
@@ -237,7 +254,7 @@ func (h *AgentHandler) handleDDNSIPReportMessage(ctx context.Context, agentID st
 	var ipReport protocol.DDNSIPReportData
 	if err := json.Unmarshal(data, &ipReport); err != nil {
 		h.logger.Error("failed to unmarshal ddns ip report", zap.Error(err))
-		return err
+		return ws.Permanent(err)
 	}
 	return h.ddnsService.HandleIPReport(ctx, agentID, &ipReport)
 }
@@ -246,7 +263,7 @@ func (h *AgentHandler) handlePublicIPReportMessage(ctx context.Context, agentID 
 	var ipReport protocol.PublicIPReportData
 	if err := json.Unmarshal(data, &ipReport); err != nil {
 		h.logger.Error("failed to unmarshal public ip report", zap.Error(err))
-		return err
+		return ws.Permanent(err)
 	}
 	return h.agentService.UpdatePublicIP(ctx, agentID, ipReport.IPv4, ipReport.IPv6)
 }
@@ -255,7 +272,7 @@ func (h *AgentHandler) handleSSHLoginEventMessage(ctx context.Context, agentID s
 	var eventData protocol.SSHLoginEvent
 	if err := json.Unmarshal(data, &eventData); err != nil {
 		h.logger.Error("failed to unmarshal ssh login event", zap.Error(err))
-		return err
+		return ws.Permanent(err)
 	}
 	return h.sshLoginService.HandleEvent(ctx, agentID, eventData)
 }
@@ -264,7 +281,7 @@ func (h *AgentHandler) handleSSHLoginConfigResultMessage(ctx context.Context, ag
 	var resultData protocol.SSHLoginConfigResult
 	if err := json.Unmarshal(data, &resultData); err != nil {
 		h.logger.Error("failed to unmarshal ssh login config result", zap.Error(err))
-		return err
+		return ws.Permanent(err)
 	}
 	return h.sshLoginService.HandleConfigResult(ctx, agentID, resultData)
 }
@@ -273,18 +290,18 @@ func (h *AgentHandler) handleTamperProtectMessage(ctx context.Context, agentID s
 	var protectResp protocol.TamperProtectResponse
 	if err := json.Unmarshal(data, &protectResp); err != nil {
 		h.logger.Error("failed to unmarshal tamper protect response", zap.Error(err))
-		return err
+		return ws.Permanent(err)
 	}
 	return h.tamperService.HandleConfigResult(ctx, agentID, protectResp)
 }
 
 // sendRegisterSuccess 发送注册成功响应
-func (h *AgentHandler) sendRegisterSuccess(conn *websocket.Conn, agentID string) error {
+func (h *AgentHandler) sendRegisterSuccess(conn *websocket.Conn, agentID string, ackSeq uint64) error {
 	resp := protocol.RegisterResponse{
 		AgentID:  agentID,
 		Status:   "success",
 		Reliable: true,
-		AckSeq:   h.wsManager.AckSeq(agentID),
+		AckSeq:   ackSeq,
 	}
 	return conn.WriteJSON(protocol.OutboundMessage{
 		Type: protocol.MessageTypeRegisterAck,

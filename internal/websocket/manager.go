@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,103 +18,202 @@ const (
 	serverPongWait     = 30 * time.Second
 	serverWriteWait    = 10 * time.Second
 
-	// agentQueueSize 每个探针的待处理消息队列长度。队列满时断开连接，
-	// 由探针重连后重放未确认消息，读循环不会被慢处理（DB/VM 写入）拖死。
-	agentQueueSize = 512
-	// agentQueueWait 消息入队的最长等待，超时判定为处理能力不足
-	agentQueueWait = 2 * time.Second
-	// serverSendWait 下行消息写入 Send 通道的最长等待
+	// 可靠事件必须保持会话内顺序；队列满表示服务端已无法及时消费，
+	// 断开当前传输后由 agent 保留 outbox 并重连重放。
+	reliableQueueSize = 512
+	reliableQueueWait = 2 * time.Second
+
+	// 普通遥测是 latest-wins，不应阻塞可靠事件。队列满时丢弃本批，
+	// agent 下一轮会继续上报更新后的快照。
+	bestEffortQueueSize = 128
+
 	serverSendWait = 3 * time.Second
+
+	messageRetryMin = 500 * time.Millisecond
+	messageRetryMax = 10 * time.Second
 )
 
-// agentMessage 从探针收到的一条待处理消息
+// MessageHandler 处理一条 agent 上行消息。
+type MessageHandler func(ctx context.Context, agentID string, messageType string, data json.RawMessage) error
+
+// PongHandler 处理连接 pong。
+type PongHandler func(client *Client)
+
+// PermanentMessageError 表示重放也无法成功的坏消息，例如 JSON 结构错误。
+// 可靠处理器会记录并确认这类消息，避免单条毒消息永久阻塞后续事件。
+type PermanentMessageError struct {
+	err error
+}
+
+func (e *PermanentMessageError) Error() string { return e.err.Error() }
+func (e *PermanentMessageError) Unwrap() error { return e.err }
+
+// Permanent 把不可重试的消息错误标记为永久错误。
+func Permanent(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &PermanentMessageError{err: err}
+}
+
+func isPermanent(err error) bool {
+	var target *PermanentMessageError
+	return errors.As(err, &target)
+}
+
 type agentMessage struct {
 	seq  uint64
 	typ  string
 	data json.RawMessage
 }
 
-// processor 单个探针连接的有序处理单元：ReadPump 只负责解析并入队，
-// processLoop 串行消费，慢处理不再阻塞 TCP 读取造成反压。
-type processor struct {
-	queue    chan agentMessage
-	quit     chan struct{}
-	quitOnce sync.Once
+// agentSession 是可靠投递状态的唯一所有者。它绑定 agentID + BootID，
+// 与具体 WebSocket 连接解耦：同一进程重连复用 session，新进程注册时
+// 原子替换 session，旧 worker 即使仍在返回路径上也无法提交 ACK。
+type agentSession struct {
+	agentID string
+	bootID  string
+
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	reliableQueue   chan agentMessage
+	bestEffortQueue chan agentMessage
+	ackSeq          atomic.Uint64
 }
 
-func newProcessor() *processor {
-	return &processor{
-		queue: make(chan agentMessage, agentQueueSize),
-		quit:  make(chan struct{}),
+func newAgentSession(agentID, bootID string) *agentSession {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &agentSession{
+		agentID:         agentID,
+		bootID:          bootID,
+		ctx:             ctx,
+		cancel:          cancel,
+		reliableQueue:   make(chan agentMessage, reliableQueueSize),
+		bestEffortQueue: make(chan agentMessage, bestEffortQueueSize),
 	}
 }
 
-func (p *processor) stop() {
-	p.quitOnce.Do(func() { close(p.quit) })
-}
-
-// Client WebSocket客户端
+// Client 只代表一次 WebSocket 传输，不拥有可靠会话状态。
 type Client struct {
-	ID         string          // 探针ID
-	Conn       *websocket.Conn // WebSocket连接
-	Send       chan []byte     // 发送消息通道
-	Manager    *Manager        // 管理器引用
-	LastActive time.Time       // 最后活跃时间
-	proc       *processor      // 上行消息的有序处理器
-	// lastStatusWrite 上次把在线状态写入数据库的时间（毫秒），用于
-	// 对 pong 触发的状态更新去抖
+	ID      string
+	conn    *websocket.Conn
+	manager *Manager
+	session *agentSession
+
+	send chan []byte
+	done chan struct{}
+
+	closeOnce       sync.Once
+	lastActive      atomic.Int64
 	lastStatusWrite atomic.Int64
-	closed          bool // 标记channel是否已关闭
-	closeMu         sync.Mutex
 }
 
-// Manager WebSocket连接管理器
+// NewClient 创建尚未注册到 Manager 的连接。
+func NewClient(agentID string, conn *websocket.Conn, manager *Manager) *Client {
+	c := &Client{
+		ID:      agentID,
+		conn:    conn,
+		manager: manager,
+		send:    make(chan []byte, 512),
+		done:    make(chan struct{}),
+	}
+	c.touch()
+	return c
+}
+
+func (c *Client) touch() {
+	c.lastActive.Store(time.Now().UnixMilli())
+}
+
+func (c *Client) inactiveFor(now time.Time) time.Duration {
+	last := c.lastActive.Load()
+	if last == 0 {
+		return 0
+	}
+	return now.Sub(time.UnixMilli(last))
+}
+
+func (c *Client) close() {
+	c.closeOnce.Do(func() {
+		close(c.done)
+		if c.conn != nil {
+			_ = c.conn.Close()
+		}
+	})
+}
+
+// Close 主动关闭本次传输；Handler 的退出路径负责同步注销 current client。
+func (c *Client) Close() {
+	c.close()
+}
+
+func (c *Client) sendWithTimeout(message []byte, timeout time.Duration) error {
+	select {
+	case <-c.done:
+		return ErrClientNotFound
+	default:
+	}
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case <-c.done:
+		return ErrClientNotFound
+	case c.send <- message:
+		return nil
+	case <-timer.C:
+		return ErrSendTimeout
+	}
+}
+
+func (c *Client) trySend(message []byte) bool {
+	select {
+	case <-c.done:
+		return false
+	default:
+	}
+
+	select {
+	case <-c.done:
+		return false
+	case c.send <- message:
+		return true
+	default:
+		return false
+	}
+}
+
+// Manager 同步维护当前连接和每个 agent 的会话状态。
 type Manager struct {
-	clients    map[string]*Client // 客户端映射 probeID -> Client
-	register   chan *Client       // 注册通道
-	unregister chan *Client       // 注销通道
-	broadcast  chan []byte        // 广播通道
-	mu         sync.RWMutex       // 读写锁
-	logger     *zap.Logger        // 日志
-	onMessage  MessageHandler     // 消息处理器
-	onPong     PongHandler        // Pong 处理器
-	// ackSeqs 每个探针事件流的累计确认位点（探针重启或服务端重启后
-	// 丢失，退化为重放+去重，可能产生少量重复处理）
-	ackSeqs map[string]uint64
-	// sessions 每个探针最近一次注册携带的 BootID，用于识别探针进程重启
-	sessions map[string]string
+	mu       sync.RWMutex
+	clients  map[string]*Client
+	sessions map[string]*agentSession
+
+	logger    *zap.Logger
+	onMessage MessageHandler
+	onPong    PongHandler
 }
 
-// MessageHandler 消息处理器接口
-type MessageHandler func(ctx context.Context, probeID string, messageType string, data json.RawMessage) error
-
-// PongHandler Pong 处理器接口
-type PongHandler func(client *Client)
-
-// NewManager 创建新的WebSocket管理器
 func NewManager(logger *zap.Logger) *Manager {
 	return &Manager{
-		clients:    make(map[string]*Client),
-		register:   make(chan *Client, 10),
-		unregister: make(chan *Client, 10),
-		broadcast:  make(chan []byte, 256),
-		ackSeqs:    make(map[string]uint64),
-		sessions:   make(map[string]string),
-		logger:     logger,
+		clients:  make(map[string]*Client),
+		sessions: make(map[string]*agentSession),
+		logger:   logger,
 	}
 }
 
-// SetMessageHandler 设置消息处理器
 func (m *Manager) SetMessageHandler(handler MessageHandler) {
 	m.onMessage = handler
 }
 
-// SetPongHandler 设置 Pong 处理器
 func (m *Manager) SetPongHandler(handler PongHandler) {
 	m.onPong = handler
 }
 
-// Run 启动管理器
+// Run 只负责周期性连接保活检查和进程退出清理；注册/注销本身是同步的，
+// 注册响应拿到的 ACK 与刚完成的会话切换因此属于同一个原子操作。
 func (m *Manager) Run(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -121,135 +221,189 @@ func (m *Manager) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			m.shutdown()
 			m.logger.Info("websocket manager stopped")
 			return
-		case client := <-m.register:
-			m.registerClient(client)
-		case client := <-m.unregister:
-			m.unregisterClient(client)
-		case message := <-m.broadcast:
-			m.broadcastMessage(message)
 		case <-ticker.C:
 			m.checkInactiveClients()
 		}
 	}
 }
 
-// Register 注册客户端（公开方法）。同步初始化处理器，确保随后的
-// ReadPump 可以立即入队；注册表维护仍走 Run 循环的注册通道。
-func (m *Manager) Register(client *Client) {
-	client.proc = newProcessor()
-	go m.processLoop(client)
-	m.register <- client
-}
+// Register 原子激活连接并返回该 BootID 会话已确认的累计位点。
+// 同 BootID 重连复用处理队列；BootID 变化创建全新 session 并取消旧 session。
+func (m *Manager) Register(client *Client, bootID string) uint64 {
+	var oldClient *Client
+	var oldSession *agentSession
+	var startSession *agentSession
 
-// registerClient 注册客户端
-func (m *Manager) registerClient(client *Client) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// 如果已存在该探针的连接，先关闭旧连接
-	if oldClient, exists := m.clients[client.ID]; exists && oldClient != client {
-		m.logger.Info("agent reconnected, closing old connection", zap.String("agentID", client.ID))
-		oldClient.closeChannel()
-		oldClient.Conn.Close()
-		oldClient.stopProcessor()
+	oldClient = m.clients[client.ID]
+	session := m.sessions[client.ID]
+	if session == nil || (bootID != "" && session.bootID != bootID) {
+		oldSession = session
+		session = newAgentSession(client.ID, bootID)
+		m.sessions[client.ID] = session
+		startSession = session
 	}
-
+	client.session = session
 	m.clients[client.ID] = client
-	m.logger.Info("agent connected", zap.String("agentID", client.ID), zap.Int("totalClients", len(m.clients)))
-}
+	ackSeq := session.ackSeq.Load()
+	clientCount := len(m.clients)
+	m.mu.Unlock()
 
-// unregisterClient 注销客户端
-func (m *Manager) unregisterClient(client *Client) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// 只注销当前注册的连接：探针快速重连时旧连接的退出路径不能把
-	// 新连接从注册表中移除，否则新连接的下行通道会被关闭
-	if cur, exists := m.clients[client.ID]; exists && cur == client {
-		delete(m.clients, client.ID)
-		client.closeChannel()
-		m.logger.Info("agent disconnected", zap.String("agentID", client.ID), zap.Int("totalClients", len(m.clients)))
+	// map/session 指针已切换后再关闭旧对象。旧 worker 的提交路径会先
+	// 校验 session 指针，所以无法污染新会话。
+	if oldSession != nil {
+		oldSession.cancel()
 	}
-	client.stopProcessor()
+	if oldClient != nil && oldClient != client {
+		oldClient.close()
+	}
+	if startSession != nil {
+		go m.reliableProcessLoop(startSession)
+		go m.bestEffortProcessLoop(startSession)
+	}
+
+	m.logger.Info("agent connected",
+		zap.String("agentID", client.ID),
+		zap.String("bootID", bootID),
+		zap.Uint64("ackSeq", ackSeq),
+		zap.Int("totalClients", clientCount))
+	return ackSeq
 }
 
-// broadcastMessage 广播消息
-func (m *Manager) broadcastMessage(message []byte) {
+// Unregister 只移除仍为 current 的连接，返回值用于决定是否标记离线。
+func (m *Manager) Unregister(client *Client) bool {
+	m.mu.Lock()
+	current := m.clients[client.ID] == client
+	if current {
+		delete(m.clients, client.ID)
+	}
+	clientCount := len(m.clients)
+	m.mu.Unlock()
+
+	client.close()
+	if current {
+		m.logger.Info("agent disconnected",
+			zap.String("agentID", client.ID),
+			zap.Int("totalClients", clientCount))
+	}
+	return current
+}
+
+// ForgetAgent 删除已移除 agent 的连接与会话状态，终止常驻 worker。
+func (m *Manager) ForgetAgent(agentID string) {
+	m.mu.Lock()
+	client := m.clients[agentID]
+	session := m.sessions[agentID]
+	delete(m.clients, agentID)
+	delete(m.sessions, agentID)
+	m.mu.Unlock()
+
+	if client != nil {
+		client.close()
+	}
+	if session != nil {
+		session.cancel()
+	}
+}
+
+func (m *Manager) shutdown() {
+	m.mu.Lock()
+	clients := make([]*Client, 0, len(m.clients))
+	for _, client := range m.clients {
+		clients = append(clients, client)
+	}
+	sessions := make([]*agentSession, 0, len(m.sessions))
+	for _, session := range m.sessions {
+		sessions = append(sessions, session)
+	}
+	m.clients = make(map[string]*Client)
+	m.sessions = make(map[string]*agentSession)
+	m.mu.Unlock()
+
+	for _, client := range clients {
+		client.close()
+	}
+	for _, session := range sessions {
+		session.cancel()
+	}
+}
+
+func (m *Manager) isCurrentSession(session *agentSession) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
-	for _, client := range m.clients {
-		select {
-		case client.Send <- message:
-		default:
-			// 发送失败，客户端可能已断开
-			m.logger.Warn("failed to send message, client may be disconnected", zap.String("agentID", client.ID))
-		}
-	}
+	return m.sessions[session.agentID] == session
 }
 
-// checkInactiveClients 检查不活跃的客户端
+func (m *Manager) currentClientForSession(session *agentSession) *Client {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.sessions[session.agentID] != session {
+		return nil
+	}
+	client := m.clients[session.agentID]
+	if client == nil || client.session != session {
+		return nil
+	}
+	return client
+}
+
 func (m *Manager) checkInactiveClients() {
+	now := time.Now()
 	m.mu.RLock()
-	inactiveClients := make([]*Client, 0)
-	timeout := 2 * time.Minute
-
+	inactive := make([]*Client, 0)
 	for _, client := range m.clients {
-		if time.Since(client.LastActive) > timeout {
-			inactiveClients = append(inactiveClients, client)
+		if client.inactiveFor(now) > 2*time.Minute {
+			inactive = append(inactive, client)
 		}
 	}
 	m.mu.RUnlock()
 
-	// 断开不活跃的客户端
-	for _, client := range inactiveClients {
-		// 再次检查客户端是否仍然存在（避免竞态条件）
+	for _, client := range inactive {
 		m.mu.RLock()
-		cur, exists := m.clients[client.ID]
+		current := m.clients[client.ID] == client
 		m.mu.RUnlock()
-
-		if exists && cur == client {
+		if current {
 			m.logger.Warn("agent inactive timeout, disconnecting", zap.String("agentID", client.ID))
-			client.Conn.Close()
-			m.unregister <- client
+			client.close()
 		}
 	}
 }
 
-// SendToClient 发送消息给指定客户端。通道满时最多等待 serverSendWait，
-// 避免高负载时指令/配置被静默丢弃
-func (m *Manager) SendToClient(probeID string, message []byte) error {
+func (m *Manager) SendToClient(agentID string, message []byte) error {
 	m.mu.RLock()
-	client, exists := m.clients[probeID]
+	client := m.clients[agentID]
 	m.mu.RUnlock()
-
-	if !exists {
+	if client == nil {
 		return ErrClientNotFound
 	}
-
-	select {
-	case client.Send <- message:
-		return nil
-	case <-time.After(serverSendWait):
-		return ErrSendTimeout
-	}
+	return client.sendWithTimeout(message, serverSendWait)
 }
 
-// GetClient 获取客户端
-func (m *Manager) GetClient(probeID string) (*Client, bool) {
+func (m *Manager) GetClient(agentID string) (*Client, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	client, exists := m.clients[probeID]
-	return client, exists
+	client, ok := m.clients[agentID]
+	return client, ok
 }
 
-// GetAllClients 获取所有客户端ID
+// DoIfCurrent 在连接仍为 current 的前提下执行状态变更，并用注册锁保证
+// 回调完成前不会切换连接。用于 pong 在线写库，避免旧连接的迟到写入覆盖
+// 新连接失败后的离线状态。
+func (m *Manager) DoIfCurrent(client *Client, fn func() error) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.clients[client.ID] != client {
+		return false, nil
+	}
+	return true, fn()
+}
+
 func (m *Manager) GetAllClients() []string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
 	ids := make([]string, 0, len(m.clients))
 	for id := range m.clients {
 		ids = append(ids, id)
@@ -257,158 +411,209 @@ func (m *Manager) GetAllClients() []string {
 	return ids
 }
 
-// ClientCount 获取客户端数量
 func (m *Manager) ClientCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.clients)
 }
 
-// AckSeq 返回探针事件流的累计确认位点。注册响应携带该值，探针据此
-// 跳过服务端已处理的消息，避免无谓重放。
-func (m *Manager) AckSeq(probeID string) uint64 {
+func (m *Manager) AckSeq(agentID string) uint64 {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.ackSeqs[probeID]
+	session := m.sessions[agentID]
+	m.mu.RUnlock()
+	if session == nil {
+		return 0
+	}
+	return session.ackSeq.Load()
 }
 
-// BeginAgentSession 在注册时同步探针会话：BootID 变化说明探针进程
-// 重启过（纯内存事件队列清空、seq 从 1 重新分配），必须重置确认位点，
-// 否则重启后新分配的小序号会被旧位点误判为重复消息而丢弃。
-// 旧版探针不携带 BootID，保持原位点不变。
-func (m *Manager) BeginAgentSession(probeID, bootID string) {
-	if bootID == "" {
+// enqueueBestEffort/ enqueueReliable 在持有 current-client 读锁时完成入队。
+// Register 必须取得写锁，因此同 BootID 重连时，旧连接已经读出的消息必定
+// 先入队，然后才会切换连接；切换完成后旧连接不能再把较大 seq 插到新连接
+// 重放的较小 seq 前面，累计 ACK 顺序不会被跨连接竞态破坏。
+func (m *Manager) enqueueBestEffort(client *Client, msg agentMessage) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.clients[client.ID] != client || m.sessions[client.ID] != client.session {
+		return false
+	}
+	select {
+	case client.session.bestEffortQueue <- msg:
+		return true
+	default:
+		return false
+	}
+}
+
+func (m *Manager) enqueueReliable(ctx context.Context, client *Client, msg agentMessage) error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.clients[client.ID] != client || m.sessions[client.ID] != client.session {
+		return ErrClientNotFound
+	}
+
+	timer := time.NewTimer(reliableQueueWait)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-client.done:
+		return ErrClientNotFound
+	case <-client.session.ctx.Done():
+		return ErrClientNotFound
+	case client.session.reliableQueue <- msg:
+		return nil
+	case <-timer.C:
+		return ErrQueueFull
+	}
+}
+
+// ReadPump 只解析并按可靠性分流。可靠队列提供反压；best-effort 遥测
+// 队列满时直接丢弃，避免 VM 慢写阻塞安全事件。
+func (c *Client) ReadPump(ctx context.Context) {
+	defer c.close()
+	if c.conn == nil {
 		return
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if m.sessions[probeID] != bootID {
-		m.sessions[probeID] = bootID
-		m.ackSeqs[probeID] = 0
-	}
-}
-
-// advanceAckSeq 推进探针的累计确认位点（只前进不回退）
-func (m *Manager) advanceAckSeq(probeID string, seq uint64) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.ackSeqs[probeID] < seq {
-		m.ackSeqs[probeID] = seq
-	}
-}
-
-// ReadPump 读取客户端消息。只做解析和入队，处理在 processLoop 中进行，
-// 保证慢处理不会阻塞读取造成 TCP 反压。
-func (c *Client) ReadPump(ctx context.Context) {
-	defer func() {
-		c.Manager.unregister <- c
-		c.Conn.Close()
-		c.stopProcessor()
-	}()
-
-	c.Conn.SetReadDeadline(time.Now().Add(serverPongWait))
-	c.Conn.SetPongHandler(func(string) error {
-		c.Conn.SetReadDeadline(time.Now().Add(serverPongWait))
-		c.LastActive = time.Now()
-		if c.Manager.onPong != nil {
-			go c.Manager.onPong(c)
+	_ = c.conn.SetReadDeadline(time.Now().Add(serverPongWait))
+	c.conn.SetPongHandler(func(string) error {
+		if err := c.conn.SetReadDeadline(time.Now().Add(serverPongWait)); err != nil {
+			return err
+		}
+		c.touch()
+		if c.manager.onPong != nil {
+			// 同步执行，确保连接退出后的离线写库一定发生在本次 pong
+			// 状态刷新之后，避免遗留 goroutine 把已断开的连接重新标在线。
+			c.manager.onPong(c)
 		}
 		return nil
 	})
 
 	for {
-		_, message, err := c.Conn.ReadMessage()
+		_, raw, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				c.Manager.logger.Error("websocket read error", zap.Error(err), zap.String("agentID", c.ID))
+				c.manager.logger.Error("websocket read error", zap.Error(err), zap.String("agentID", c.ID))
 			}
 			return
 		}
+		c.touch()
 
-		c.LastActive = time.Now()
-
-		// 解析消息
 		var msg protocol.InputMessage
-		if err := json.Unmarshal(message, &msg); err != nil {
-			c.Manager.logger.Error("failed to parse message", zap.Error(err), zap.String("agentID", c.ID))
+		if err := json.Unmarshal(raw, &msg); err != nil {
+			c.manager.logger.Error("failed to parse message", zap.Error(err), zap.String("agentID", c.ID))
 			continue
 		}
 
-		if err := c.enqueue(agentMessage{seq: msg.Seq, typ: string(msg.Type), data: msg.Data}); err != nil {
-			c.Manager.logger.Warn("agent processing queue stalled, disconnecting for replay",
-				zap.String("agentID", c.ID), zap.Error(err))
+		item := agentMessage{seq: msg.Seq, typ: string(msg.Type), data: msg.Data}
+		if msg.Seq == 0 {
+			if !c.manager.enqueueBestEffort(c, item) {
+				c.manager.logger.Warn("best-effort agent queue full, dropping telemetry",
+					zap.String("agentID", c.ID), zap.String("type", string(msg.Type)))
+			}
+			continue
+		}
+
+		if err := c.manager.enqueueReliable(ctx, c, item); err != nil {
+			c.manager.logger.Warn("reliable agent queue stalled, disconnecting for replay",
+				zap.String("agentID", c.ID), zap.Uint64("seq", msg.Seq), zap.Error(err))
 			return
 		}
 	}
 }
 
-// enqueue 将消息放入该连接的有序处理队列。队列满时最多等待
-// agentQueueWait，仍无法入队则返回错误，由调用方断开连接触发探针重放。
-func (c *Client) enqueue(msg agentMessage) error {
-	// 先检查处理器是否已停止：select 各分支同时就绪时是随机选择，
-	// 不前置检查会导致停止后的消息仍被入队却永远无人消费
-	select {
-	case <-c.proc.quit:
-		return ErrProcessorStopped
-	default:
-	}
-
-	select {
-	case c.proc.queue <- msg:
-		return nil
-	case <-time.After(agentQueueWait):
-		return ErrQueueFull
-	case <-c.proc.quit:
-		return ErrProcessorStopped
-	}
-}
-
-// stopProcessor 停止该连接的处理器
-func (c *Client) stopProcessor() {
-	if c.proc != nil {
-		c.proc.stop()
-	}
-}
-
-// processLoop 串行处理单个探针的消息，保证 per-agent 顺序。
-// 带 seq 的消息处理成功后推进确认位点并回累计 ack；重放消息按
-// 确认位点去重。处理失败按丢弃处理并记录（与旧行为一致），避免
-// 毒消息卡死整个事件流。
-func (m *Manager) processLoop(c *Client) {
+func (m *Manager) bestEffortProcessLoop(session *agentSession) {
 	for {
 		select {
-		case msg := <-c.proc.queue:
-			if msg.seq > 0 && msg.seq <= m.AckSeq(c.ID) {
-				// 重放去重：该消息已处理过。仍回 ack（当前确认位点
-				// 不低于该 seq），让探针能修剪队列
-				m.sendAck(c, m.AckSeq(c.ID))
+		case <-session.ctx.Done():
+			return
+		case msg := <-session.bestEffortQueue:
+			if session.ctx.Err() != nil || !m.isCurrentSession(session) {
+				return
+			}
+			if m.onMessage == nil {
+				continue
+			}
+			if err := m.onMessage(session.ctx, session.agentID, msg.typ, msg.data); err != nil {
+				m.logger.Error("failed to handle best-effort message, dropped",
+					zap.Error(err), zap.String("agentID", session.agentID), zap.String("type", msg.typ))
+			}
+		}
+	}
+}
+
+func (m *Manager) reliableProcessLoop(session *agentSession) {
+	for {
+		select {
+		case <-session.ctx.Done():
+			return
+		case msg := <-session.reliableQueue:
+			if session.ctx.Err() != nil || !m.isCurrentSession(session) {
+				return
+			}
+			if msg.seq <= session.ackSeq.Load() {
+				m.sendAck(session, session.ackSeq.Load())
 				continue
 			}
 
-			if m.onMessage != nil {
-				if err := m.onMessage(context.Background(), c.ID, msg.typ, msg.data); err != nil {
-					m.logger.Error("failed to handle message, dropped",
-						zap.Error(err), zap.String("agentID", c.ID),
-						zap.String("type", msg.typ), zap.Uint64("seq", msg.seq))
-				}
+			if !m.processReliableMessage(session, msg) {
+				return
 			}
-
-			if msg.seq > 0 {
-				m.advanceAckSeq(c.ID, msg.seq)
-				m.sendAck(c, msg.seq)
+			if !m.isCurrentSession(session) {
+				return
 			}
-
-		case <-c.proc.quit:
-			return
+			session.ackSeq.Store(msg.seq)
+			m.sendAck(session, msg.seq)
 		}
 	}
 }
 
-// sendAck 向探针发送累计确认。走下行 Send 通道，满时丢弃：丢失的
-// ack 只会让探针多保留一会儿消息，重连重放时按 seq 去重，无副作用。
-func (m *Manager) sendAck(c *Client, seq uint64) {
+// processReliableMessage 对瞬时错误原位退避重试，保证后续序号不能越过
+// 失败消息；永久格式错误明确丢弃并允许推进位点。
+func (m *Manager) processReliableMessage(session *agentSession, msg agentMessage) bool {
+	retryDelay := messageRetryMin
+	for {
+		if session.ctx.Err() != nil || !m.isCurrentSession(session) {
+			return false
+		}
+		if m.onMessage == nil {
+			return true
+		}
+
+		err := m.onMessage(session.ctx, session.agentID, msg.typ, msg.data)
+		if err == nil {
+			return true
+		}
+		if isPermanent(err) {
+			m.logger.Error("permanent reliable message error, dropped",
+				zap.Error(err), zap.String("agentID", session.agentID),
+				zap.String("type", msg.typ), zap.Uint64("seq", msg.seq))
+			return true
+		}
+
+		m.logger.Warn("reliable message handling failed, retrying",
+			zap.Error(err), zap.String("agentID", session.agentID),
+			zap.String("type", msg.typ), zap.Uint64("seq", msg.seq),
+			zap.Duration("retryAfter", retryDelay))
+
+		timer := time.NewTimer(retryDelay)
+		select {
+		case <-session.ctx.Done():
+			timer.Stop()
+			return false
+		case <-timer.C:
+		}
+		if retryDelay < messageRetryMax {
+			retryDelay *= 2
+			if retryDelay > messageRetryMax {
+				retryDelay = messageRetryMax
+			}
+		}
+	}
+}
+
+func (m *Manager) sendAck(session *agentSession, seq uint64) {
 	payload, err := json.Marshal(protocol.OutboundMessage{
 		Type: protocol.MessageTypeAck,
 		Data: protocol.AckData{Seq: seq},
@@ -416,72 +621,51 @@ func (m *Manager) sendAck(c *Client, seq uint64) {
 	if err != nil {
 		return
 	}
-	select {
-	case c.Send <- payload:
-	default:
+	if client := m.currentClientForSession(session); client != nil {
+		client.trySend(payload)
 	}
 }
 
-// WritePump 向客户端写入消息
 func (c *Client) WritePump() {
+	if c.conn == nil {
+		return
+	}
 	ticker := time.NewTicker(serverPingInterval)
-	defer func() {
-		ticker.Stop()
-		c.Conn.Close()
-	}()
+	defer ticker.Stop()
 
 	for {
 		select {
-		case message, ok := <-c.Send:
-			c.Conn.SetWriteDeadline(time.Now().Add(serverWriteWait))
-			if !ok {
-				// 通道已关闭
-				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+		case <-c.done:
+			return
+		case message := <-c.send:
+			_ = c.conn.SetWriteDeadline(time.Now().Add(serverWriteWait))
+			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
+				c.manager.logger.Error("failed to write message", zap.Error(err), zap.String("agentID", c.ID))
+				c.close()
 				return
 			}
-
-			if err := c.Conn.WriteMessage(websocket.TextMessage, message); err != nil {
-				c.Manager.logger.Error("failed to write message", zap.Error(err), zap.String("agentID", c.ID))
-				return
-			}
-
 		case <-ticker.C:
-			c.Conn.SetWriteDeadline(time.Now().Add(serverWriteWait))
-			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			_ = c.conn.SetWriteDeadline(time.Now().Add(serverWriteWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				c.close()
 				return
 			}
 		}
 	}
 }
 
-// ShouldWriteStatus 报告是否需要把在线状态写入数据库。去抖：本连接
-// 首次调用立即通过，之后每 refreshInterval 通过一次。
 func (c *Client) ShouldWriteStatus(refreshInterval time.Duration) bool {
 	now := time.Now().UnixMilli()
 	last := c.lastStatusWrite.Load()
 	return last == 0 || now-last >= refreshInterval.Milliseconds()
 }
 
-// MarkStatusWritten 记录本次在线状态已成功写库
 func (c *Client) MarkStatusWritten() {
 	c.lastStatusWrite.Store(time.Now().UnixMilli())
 }
 
-// closeChannel 安全地关闭发送通道
-func (c *Client) closeChannel() {
-	c.closeMu.Lock()
-	defer c.closeMu.Unlock()
-
-	if !c.closed {
-		close(c.Send)
-		c.closed = true
-	}
-}
-
-// 错误定义
 var (
-	ErrClientNotFound   = &websocket.CloseError{Code: 1000, Text: "client not found"}
-	ErrSendTimeout      = &websocket.CloseError{Code: 1001, Text: "send timeout"}
-	ErrQueueFull        = &websocket.CloseError{Code: 1013, Text: "processing queue full"}
-	ErrProcessorStopped = &websocket.CloseError{Code: 1000, Text: "processor stopped"}
+	ErrClientNotFound = &websocket.CloseError{Code: 1000, Text: "client not found"}
+	ErrSendTimeout    = &websocket.CloseError{Code: 1001, Text: "send timeout"}
+	ErrQueueFull      = &websocket.CloseError{Code: 1013, Text: "reliable queue full"}
 )

@@ -11,7 +11,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pika-monitor/pika/internal/protocol"
@@ -95,7 +94,6 @@ type Agent struct {
 	collectorManager *collector.Manager
 	metricsStore     *metricsStore
 	outbox           *outbox
-	reliable         atomic.Bool
 	tamperProtector  *tamper.Protector
 	sshMonitor       *sshmonitor.Monitor
 }
@@ -123,6 +121,10 @@ func (a *Agent) Start(ctx context.Context) error {
 	// 采集与发送解耦：采集永远运行（断线也写快照），发送独立读快照上报
 	go a.collectLoop(ctx)
 	go a.sendLoop(ctx)
+	// 安全事件消费属于 Agent 生命周期，而不是单次 WebSocket 连接。
+	// 断线和退避期间仍持续写入 outbox，避免上游小缓冲区溢出丢事件。
+	go a.tamperEventLoop(ctx)
+	go a.sshLoginEventLoop(ctx)
 
 	// 启动探针主循环
 	b := &backoff.Backoff{
@@ -230,9 +232,8 @@ func (a *Agent) runOnce(ctx context.Context, onRegistered func()) error {
 	// 重置发送游标，使下一个 sendLoop tick 立即发送当前全量快照，
 	// 保证重连瞬间服务端就能拿到最新数据
 	a.metricsStore.reset()
-	// 服务端声明支持可靠投递时，事件类消息改走 outbox；注册响应携带的
-	// 累计确认位点先修剪队列，避免重放服务端已处理的消息
-	a.reliable.Store(registerResp.Reliable)
+	// 可靠服务端返回累计确认位点；旧服务端没有 ACK，发送器会在每次
+	// WebSocket 写成功后本地确认，从而完整支持升级后的降级/回滚。
 	if registerResp.Reliable && registerResp.AckSeq > 0 {
 		a.outbox.ack(registerResp.AckSeq)
 	}
@@ -267,21 +268,10 @@ func (a *Agent) runOnce(ctx context.Context, onRegistered func()) error {
 		}
 	})
 
-	// 事件类消息可靠发送（仅服务端支持时启用）
-	if registerResp.Reliable {
-		wg.Go(func() {
-			a.eventSendLoop(done, conn)
-		})
-	}
-
-	// 启动防篡改事件监控
+	// 每个连接只有一个 outbox 发送器。可靠服务端等待累计 ACK；旧服务端
+	// 按写成功确认，队列不会因版本回退而被永久搁置。
 	wg.Go(func() {
-		a.tamperEventLoop(ctx, done)
-	})
-
-	// 启动 SSH 登录事件监控
-	wg.Go(func() {
-		a.sshLoginEventLoop(ctx, done)
+		a.eventSendLoop(done, conn, registerResp.Reliable)
 	})
 
 	// 等待第一个错误或上下文取消
@@ -461,23 +451,36 @@ func (a *Agent) handleAck(data json.RawMessage) {
 	a.outbox.ack(ack.Seq)
 }
 
-// eventSendLoop 事件类消息的可靠发送循环（每个连接一个）。
-// 连接建立后先从队头重放全部未确认消息（服务端按 seq 去重），之后增量
-// 发送新入队的消息；写失败直接返回并断开连接，未确认消息留给下一个
-// 连接重放。
-func (a *Agent) eventSendLoop(done chan struct{}, conn *safeConn) {
+// eventSendLoop 是单连接 outbox 发送器。可靠模式下由服务端 ACK 修剪；
+// 兼容旧服务端时以 WebSocket 写成功作为本地确认，至少保证断线期间已经
+// 入队的消息会在降级连接上继续发送。
+func (a *Agent) eventSendLoop(done chan struct{}, conn *safeConn, reliable bool) {
+	if err := sendOutboxLoop(a.outbox, done, conn, reliable); err != nil {
+		slog.Warn("事件消息发送失败，等待重连后重放", "error", err)
+		a.killConn(conn)
+	}
+}
+
+type jsonWriter interface {
+	WriteJSON(v interface{}) error
+}
+
+// sendOutboxLoop 是与连接生命周期无关的发送算法，便于独立验证可靠和
+// 旧版降级语义。写失败不修改待确认消息，由调用方关闭连接并重连。
+func sendOutboxLoop(outbox *outbox, done <-chan struct{}, writer jsonWriter, reliable bool) error {
 	var lastSent uint64
 	for {
-		for _, msg := range a.outbox.after(lastSent) {
-			if err := conn.WriteJSON(msg); err != nil {
-				slog.Warn("事件消息发送失败，等待重连后重放", "error", err, "seq", msg.Seq)
-				a.killConn(conn)
-				return
+		for _, msg := range outbox.after(lastSent) {
+			if err := writer.WriteJSON(msg); err != nil {
+				return fmt.Errorf("send outbox seq %d: %w", msg.Seq, err)
 			}
 			lastSent = msg.Seq
+			if !reliable {
+				outbox.ack(msg.Seq)
+			}
 		}
-		if !a.outbox.wait(done) {
-			return
+		if !outbox.wait(done) {
+			return nil
 		}
 	}
 }
@@ -512,7 +515,7 @@ func (a *Agent) handleMonitorConfig(data json.RawMessage) {
 	slog.Info("收到服务监控配置，立即执行检测", "count", len(payload.Items))
 
 	// 立即执行一次监控检测，结果以单元素 batch 上报。
-	// 走 sendOutboundMessage（可靠模式下进 outbox），断线期间不丢
+	// 走常驻 outbox，断线和版本降级期间也不会绕过队列
 	sample := manager.CollectMonitor(payload.Items)
 	if err := a.sendOutboundMessage(protocol.OutboundMessage{
 		Type: protocol.MessageTypeMetrics,
@@ -536,25 +539,10 @@ func (a *Agent) getActiveConn() *safeConn {
 	return a.activeConn
 }
 
-// sendOutboundMessage 发送事件类出站消息。服务端支持可靠投递时入队
-// outbox，由专用协程发送并等待服务端确认，断线期间不丢；否则降级为
-// 直接发送（与旧服务端兼容）。
+// sendOutboundMessage 把事件类消息无条件写入常驻 outbox。网络版本协商
+// 只影响连接级发送器如何确认，不影响事件是否在断线期间被接收。
 func (a *Agent) sendOutboundMessage(msg protocol.OutboundMessage) error {
-	if a.reliable.Load() {
-		a.outbox.enqueue(msg)
-		return nil
-	}
-
-	conn := a.getActiveConn()
-	if conn == nil {
-		return fmt.Errorf("connection is unavailable")
-	}
-
-	if err := conn.WriteJSON(msg); err != nil {
-		a.killConn(conn)
-		return err
-	}
-
+	a.outbox.enqueue(msg)
 	return nil
 }
 
@@ -798,14 +786,12 @@ func (a *Agent) sendTamperProtectResponse(success bool, message string, paths []
 }
 
 // tamperEventLoop 防篡改事件监控循环（包含事件和告警）
-func (a *Agent) tamperEventLoop(ctx context.Context, done chan struct{}) {
+func (a *Agent) tamperEventLoop(ctx context.Context) {
 	eventCh := a.tamperProtector.GetEvents()
 	alertCh := a.tamperProtector.GetAlerts()
 
 	for {
 		select {
-		case <-done:
-			return
 		case <-ctx.Done():
 			return
 		case event := <-eventCh:
@@ -1090,13 +1076,11 @@ func (a *Agent) sendSSHLoginConfigResult(success bool, enabled bool, message str
 }
 
 // sshLoginEventLoop SSH登录事件监控循环
-func (a *Agent) sshLoginEventLoop(ctx context.Context, done chan struct{}) {
+func (a *Agent) sshLoginEventLoop(ctx context.Context) {
 	eventCh := a.sshMonitor.GetEvents()
 
 	for {
 		select {
-		case <-done:
-			return
 		case <-ctx.Done():
 			return
 		case event := <-eventCh:

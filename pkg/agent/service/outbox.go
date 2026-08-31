@@ -92,6 +92,11 @@ func (o *outbox) ack(seq uint64) int {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
+	// 不信任超过本进程已分配范围的 ACK。异常或过期服务端位点不能
+	// 把未来序号也标成已确认，否则后续消息会长期无法正常修剪。
+	if seq > o.nextSeq {
+		seq = o.nextSeq
+	}
 	if seq <= o.ackedSeq {
 		return 0
 	}

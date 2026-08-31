@@ -1,10 +1,35 @@
 package service
 
 import (
+	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/pika-monitor/pika/internal/protocol"
 )
+
+type recordingJSONWriter struct {
+	mu       sync.Mutex
+	messages []protocol.OutboundMessage
+	err      error
+	written  chan struct{}
+}
+
+func (w *recordingJSONWriter) WriteJSON(value interface{}) error {
+	if w.err != nil {
+		return w.err
+	}
+	msg := value.(protocol.OutboundMessage)
+	w.mu.Lock()
+	w.messages = append(w.messages, msg)
+	w.mu.Unlock()
+	select {
+	case w.written <- struct{}{}:
+	default:
+	}
+	return nil
+}
 
 func TestOutboxSeqAssignment(t *testing.T) {
 	o := newOutbox()
@@ -102,5 +127,78 @@ func TestOutboxEnqueueSetsMsgSeq(t *testing.T) {
 	stored := o.after(0)
 	if len(stored) != 1 || stored[0].Seq != 1 {
 		t.Fatalf("stored = %+v, want one message with seq 1", stored)
+	}
+}
+
+func TestOutboxClampsAckToAllocatedSequence(t *testing.T) {
+	o := newOutbox()
+	o.enqueue(protocol.OutboundMessage{Type: protocol.MessageTypeTamperEvent})
+	o.enqueue(protocol.OutboundMessage{Type: protocol.MessageTypeSSHLoginEvent})
+
+	if trimmed := o.ack(999); trimmed != 2 {
+		t.Fatalf("ack beyond allocated range trimmed %d, want 2", trimmed)
+	}
+	if _, acked, _ := o.stats(); acked != 2 {
+		t.Fatalf("acked seq = %d, want clamp to 2", acked)
+	}
+
+	seq := o.enqueue(protocol.OutboundMessage{Type: protocol.MessageTypeCommandResp})
+	if seq != 3 {
+		t.Fatalf("next seq = %d, want 3", seq)
+	}
+	if pending, _, _ := o.stats(); pending != 1 {
+		t.Fatalf("future message was incorrectly pre-acked; pending = %d, want 1", pending)
+	}
+}
+
+func TestSendOutboundMessageQueuesWhileDisconnected(t *testing.T) {
+	a := &Agent{outbox: newOutbox()}
+	if err := a.sendOutboundMessage(protocol.OutboundMessage{Type: protocol.MessageTypeSSHLoginEvent}); err != nil {
+		t.Fatalf("queue disconnected event: %v", err)
+	}
+	if pending, _, _ := a.outbox.stats(); pending != 1 {
+		t.Fatalf("pending = %d, want 1", pending)
+	}
+}
+
+func TestLegacyOutboxSenderDrainsPendingMessages(t *testing.T) {
+	o := newOutbox()
+	o.enqueue(protocol.OutboundMessage{Type: protocol.MessageTypeTamperEvent})
+	o.enqueue(protocol.OutboundMessage{Type: protocol.MessageTypeSSHLoginEvent})
+
+	done := make(chan struct{})
+	writer := &recordingJSONWriter{written: make(chan struct{}, 2)}
+	result := make(chan error, 1)
+	go func() {
+		result <- sendOutboxLoop(o, done, writer, false)
+	}()
+
+	for i := 0; i < 2; i++ {
+		select {
+		case <-writer.written:
+		case <-time.After(time.Second):
+			t.Fatal("legacy sender did not flush pending messages")
+		}
+	}
+	close(done)
+	if err := <-result; err != nil {
+		t.Fatalf("legacy sender: %v", err)
+	}
+	if pending, acked, _ := o.stats(); pending != 0 || acked != 2 {
+		t.Fatalf("after legacy flush: pending=%d acked=%d, want 0/2", pending, acked)
+	}
+}
+
+func TestOutboxWriteFailureKeepsMessagePending(t *testing.T) {
+	o := newOutbox()
+	o.enqueue(protocol.OutboundMessage{Type: protocol.MessageTypeCommandResp})
+	writer := &recordingJSONWriter{err: errors.New("network down"), written: make(chan struct{}, 1)}
+
+	err := sendOutboxLoop(o, make(chan struct{}), writer, false)
+	if err == nil {
+		t.Fatal("expected write failure")
+	}
+	if pending, acked, _ := o.stats(); pending != 1 || acked != 0 {
+		t.Fatalf("after write failure: pending=%d acked=%d, want 1/0", pending, acked)
 	}
 }
