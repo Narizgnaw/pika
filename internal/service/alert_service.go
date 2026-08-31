@@ -1077,16 +1077,11 @@ func (s *AlertService) checkAgentOfflineAlerts(ctx context.Context, now int64) e
 
 		stateKey := fmt.Sprintf("%s:%s:agent_offline:%s", agent.ID, config.ConfigID, agent.ID)
 
-		// 防止时钟回拨导致负数
-		rawOfflineSeconds := int64(0)
-		if now > agent.LastSeenAt {
-			rawOfflineSeconds = (now - agent.LastSeenAt) / 1000
-		}
-		offlineStartTime := config.ConditionStartAfterMaintenance(time.UnixMilli(now), agent.LastSeenAt)
-		offlineSeconds := int64(0)
-		if now > offlineStartTime {
-			offlineSeconds = (now - offlineStartTime) / 1000
-		}
+		// status 由 WebSocket 连接的注册/注销同步维护，是当前是否离线的
+		// 权威状态；last_seen_at 仅用于在已经离线时计算持续时间。在线连接
+		// 的 last_seen_at 会按间隔去抖写库，不能单独据此判定离线，否则
+		// 写库间隔与告警阈值相同时会在边界上反复误报和恢复。
+		isOffline, offlineStartTime, offlineSeconds := agentOfflineCondition(config, &agent, now)
 
 		// 从数据库加载状态
 		state, err := s.AlertStateRepo.GetAlertState(ctx, stateKey)
@@ -1111,15 +1106,12 @@ func (s *AlertService) checkAgentOfflineAlerts(ctx context.Context, now int64) e
 		var shouldFire, shouldResolve bool
 
 		if state.IsFiring {
-			// 已有告警只在探针实际恢复后解除，不能因为维护结束后重新累计而伪造恢复。
-			if rawOfflineSeconds < int64(config.Rules.AgentOfflineDuration) {
-				shouldResolve = true
-			}
-		} else if offlineSeconds >= int64(config.Rules.AgentOfflineDuration) {
-			if !state.IsFiring {
-				shouldFire = true
-				state.IsFiring = true
-			}
+			// 已有告警只在 WebSocket 连接实际恢复后解除，不能因为维护结束后
+			// 重新累计或 last_seen_at 刷新而伪造恢复。
+			shouldResolve = !isOffline
+		} else if isOffline && offlineSeconds >= int64(config.Rules.AgentOfflineDuration) {
+			shouldFire = true
+			state.IsFiring = true
 		}
 
 		// 保存状态到数据库
@@ -1138,6 +1130,22 @@ func (s *AlertService) checkAgentOfflineAlerts(ctx context.Context, now int64) e
 	}
 
 	return nil
+}
+
+// agentOfflineCondition 返回探针当前是否离线，以及扣除维护窗口后的离线
+// 起点和持续秒数。在线状态下时间统一归零，避免去抖写入的 last_seen_at
+// 被误当作连接活性判断。
+func agentOfflineCondition(config *EffectiveAlertConfig, agent *models.Agent, now int64) (bool, int64, int64) {
+	if agent.Status == 1 {
+		return false, 0, 0
+	}
+
+	offlineStartTime := config.ConditionStartAfterMaintenance(time.UnixMilli(now), agent.LastSeenAt)
+	offlineSeconds := int64(0)
+	if now > offlineStartTime {
+		offlineSeconds = (now - offlineStartTime) / 1000
+	}
+	return true, offlineStartTime, offlineSeconds
 }
 
 // fireAgentOfflineAlert 触发探针离线告警
